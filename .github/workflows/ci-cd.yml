@@ -24,36 +24,56 @@ jobs:
         run: npm ci
 
       - name: Create server .env for CI
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_EXPIRES_IN: ${{ secrets.JWT_EXPIRES_IN }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          SSLCZ_STORE_ID: ${{ secrets.SSLCZ_STORE_ID }}
+          SSLCZ_STORE_PASS: ${{ secrets.SSLCZ_STORE_PASS }}
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
+          ADMIN_NAME: ${{ secrets.ADMIN_NAME }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_PHONE: ${{ secrets.ADMIN_PHONE }}
+          ADMIN_ROLE: ${{ secrets.ADMIN_ROLE }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_SOCKET_URL: ${{ secrets.NEXT_PUBLIC_SOCKET_URL }}
         run: |
-          cat > server/.env << EOF
+          cat > server/.env << 'EOF'
           NODE_ENV=production
           PORT=5000
-          MONGODB_URI=${{ secrets.MONGODB_URI || 'mongodb://localhost:27017/ticketgobd' }}
-          JWT_SECRET=${{ secrets.JWT_SECRET || 'ci-test-secret-change-in-production' }}
-          JWT_EXPIRES_IN=7d
-          REDIS_URL=${{ secrets.REDIS_URL || 'redis://localhost:6379' }}
-          EMAIL_HOST=${{ secrets.EMAIL_HOST || 'smtp.gmail.com' }}
-          EMAIL_PORT=${{ secrets.EMAIL_PORT || '587' }}
-          EMAIL_USER=${{ secrets.EMAIL_USER || 'test@example.com' }}
-          EMAIL_PASS=${{ secrets.EMAIL_PASS || 'test-pass' }}
-          SSLCZ_STORE_ID=${{ secrets.SSLCZ_STORE_ID || 'test-store' }}
-          SSLCZ_STORE_PASS=${{ secrets.SSLCZ_STORE_PASS || 'test-pass' }}
           SSLCZ_IS_LIVE=false
-          BACKEND_URL=${{ secrets.BACKEND_URL || 'http://localhost:5000' }}
-          FRONTEND_URL=${{ secrets.FRONTEND_URL || 'http://localhost:3000' }}
-          ADMIN_NAME=${{ secrets.ADMIN_NAME || 'Admin' }}
-          ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL || 'admin@ticketgobd.com' }}
-          ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD || 'admin123' }}
-          ADMIN_PHONE=${{ secrets.ADMIN_PHONE || '01700000000' }}
-          ADMIN_ROLE=${{ secrets.ADMIN_ROLE || 'admin' }}
+          MONGODB_URI=${MONGODB_URI}
+          JWT_SECRET=${JWT_SECRET}
+          JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
+          REDIS_URL=${REDIS_URL}
+          EMAIL_HOST=${EMAIL_HOST}
+          EMAIL_PORT=${EMAIL_PORT}
+          EMAIL_USER=${EMAIL_USER}
+          EMAIL_PASS=${EMAIL_PASS}
+          SSLCZ_STORE_ID=${SSLCZ_STORE_ID}
+          SSLCZ_STORE_PASS=${SSLCZ_STORE_PASS}
+          BACKEND_URL=${BACKEND_URL}
+          FRONTEND_URL=${FRONTEND_URL}
+          ADMIN_NAME=${ADMIN_NAME}
+          ADMIN_EMAIL=${ADMIN_EMAIL}
+          ADMIN_PASSWORD=${ADMIN_PASSWORD}
+          ADMIN_PHONE=${ADMIN_PHONE}
+          ADMIN_ROLE=${ADMIN_ROLE}
           EOF
+          envsubst < server/.env > server/.env.tmp && mv server/.env.tmp server/.env
 
-      - name: Create client .env.local for CI
-        run: |
-          cat > client/.env.local << EOF
-          NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api' }}
-          NEXT_PUBLIC_SOCKET_URL=${{ secrets.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000' }}
+          cat > client/.env.local << 'EOF'
+          NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+          NEXT_PUBLIC_SOCKET_URL=${NEXT_PUBLIC_SOCKET_URL}
           EOF
+          envsubst < client/.env.local > client/.env.local.tmp && mv client/.env.local.tmp client/.env.local
 
       - name: Lint and type-check
         run: npm run build --workspace=shared -- --noEmit || true
@@ -93,7 +113,7 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
         run: |
           if [ -z "$VERCEL_TOKEN" ]; then
-            echo "⚠️ Vercel deployment skipped. Add VERCEL_TOKEN secret to enable production deployment."
+            echo "⚠️ Vercel deployment skipped. Add VERCEL_TOKEN secret to enable."
             exit 0
           fi
           npm install -g vercel
@@ -112,7 +132,7 @@ jobs:
           RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
         run: |
           if [ -z "$RENDER_DEPLOY_HOOK" ]; then
-            echo "⚠️ Render deployment skipped. Add RENDER_DEPLOY_HOOK secret to enable production deployment."
+            echo "⚠️ Render deployment skipped. Add RENDER_DEPLOY_HOOK secret to enable."
             exit 0
           fi
           curl -X POST "$RENDER_DEPLOY_HOOK" \
@@ -142,13 +162,8 @@ jobs:
       - name: Summary
         run: |
           echo "## ✅ CI/CD Pipeline Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Build | ✓ Passed |" >> $GITHUB_STEP_SUMMARY
-          echo "| Lint | ✓ Completed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint  | ✓ Completed |" >> $GITHUB_STEP_SUMMARY
           echo "| Deploy | 🔄 Conditional |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "- Add secrets to GitHub: MONGODB_URI, JWT_SECRET, VERCEL_TOKEN, RENDER_DEPLOY_HOOK" >> $GITHUB_STEP_SUMMARY
-          echo "- Check deployment status in Actions tab" >> $GITHUB_STEP_SUMMARY
