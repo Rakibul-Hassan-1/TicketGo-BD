@@ -88,7 +88,7 @@ jobs:
           node-version: 20
 
       - name: Deploy to Vercel
-        if: ${{ secrets.VERCEL_TOKEN != '' }}
+        if: secrets.VERCEL_TOKEN != ''
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
@@ -97,7 +97,7 @@ jobs:
         working-directory: client
 
       - name: Vercel deployment skipped
-        if: ${{ secrets.VERCEL_TOKEN == '' }}
+        if: secrets.VERCEL_TOKEN == ''
         run: |
           echo "⚠️ Vercel deployment skipped. Add VERCEL_TOKEN secret to enable production deployment."
 
@@ -109,7 +109,7 @@ jobs:
 
     steps:
       - name: Trigger Render deployment
-        if: ${{ secrets.RENDER_DEPLOY_HOOK != '' }}
+        if: secrets.RENDER_DEPLOY_HOOK != ''
         run: |
           curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}" \
             -H "Content-Type: application/json" \
@@ -117,7 +117,7 @@ jobs:
             -w "\nDeploy hook triggered with status: %{http_code}\n"
 
       - name: Render deployment skipped
-        if: ${{ secrets.RENDER_DEPLOY_HOOK == '' }}
+        if: secrets.RENDER_DEPLOY_HOOK == ''
         run: |
           echo "⚠️ Render deployment skipped. Add RENDER_DEPLOY_HOOK secret to enable production deployment."
 
