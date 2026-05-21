@@ -88,18 +88,17 @@ jobs:
           node-version: 20
 
       - name: Deploy to Vercel
-        if: secrets.VERCEL_TOKEN
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
         run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "⚠️ Vercel deployment skipped. Add VERCEL_TOKEN secret to enable production deployment."
+            exit 0
+          fi
           npm install -g vercel
-          vercel deploy --prod --token=$VERCEL_TOKEN --scope=${{ secrets.VERCEL_ORG_ID }}
+          vercel deploy --prod --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID
         working-directory: client
-
-      - name: Vercel deployment skipped
-        if: "!secrets.VERCEL_TOKEN"
-        run: |
-          echo "⚠️ Vercel deployment skipped. Add VERCEL_TOKEN secret to enable production deployment."
 
   deploy-server:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -109,17 +108,17 @@ jobs:
 
     steps:
       - name: Trigger Render deployment
-        if: secrets.RENDER_DEPLOY_HOOK
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
         run: |
-          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}" \
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo "⚠️ Render deployment skipped. Add RENDER_DEPLOY_HOOK secret to enable production deployment."
+            exit 0
+          fi
+          curl -X POST "$RENDER_DEPLOY_HOOK" \
             -H "Content-Type: application/json" \
             -d '{"triggerSource": "github-webhook"}' \
             -w "\nDeploy hook triggered with status: %{http_code}\n"
-
-      - name: Render deployment skipped
-        if: "!secrets.RENDER_DEPLOY_HOOK"
-        run: |
-          echo "⚠️ Render deployment skipped. Add RENDER_DEPLOY_HOOK secret to enable production deployment."
 
   test:
     runs-on: ubuntu-latest
