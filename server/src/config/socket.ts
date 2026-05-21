@@ -1,0 +1,46 @@
+import { Server, Socket } from 'socket.io';
+import { verifyToken } from '../utils/jwt';
+import { getLockedSeats } from './redis';
+
+export const initSocket = (io: Server): void => {
+  io.use(async (socket: Socket, next) => {
+    const token = socket.handshake.auth.token;
+    if (!token) return next(new Error('Authentication required'));
+
+    try {
+      const decoded = verifyToken(token);
+      (socket as any).userId = decoded.id;
+      next();
+    } catch {
+      next(new Error('Invalid token'));
+    }
+  });
+
+  io.on('connection', (socket: Socket) => {
+    console.log(`🔌 Socket connected: ${socket.id}`);
+
+    // Join trip room to receive seat updates
+    socket.on('join:trip', async (tripId: string) => {
+      socket.join(`trip:${tripId}`);
+      const lockedSeats = await getLockedSeats(tripId).catch(() => []);
+      socket.emit('seats:locked', lockedSeats);
+    });
+
+    socket.on('leave:trip', (tripId: string) => {
+      socket.leave(`trip:${tripId}`);
+    });
+
+    socket.on('disconnect', () => {
+      console.log(`🔌 Socket disconnected: ${socket.id}`);
+    });
+  });
+};
+
+// Emit seat lock/unlock to all clients in a trip room
+export const emitSeatLocked = (io: Server, tripId: string, seats: string[]): void => {
+  io.to(`trip:${tripId}`).emit('seat:locked', seats);
+};
+
+export const emitSeatUnlocked = (io: Server, tripId: string, seats: string[]): void => {
+  io.to(`trip:${tripId}`).emit('seat:unlocked', seats);
+};
