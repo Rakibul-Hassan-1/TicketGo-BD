@@ -2,50 +2,68 @@ import Redis from "ioredis";
 
 let redisClient: Redis | null = null;
 let redisHealthy = false;
+let redisWarningShown = false;
+
+const warnRedisOnce = (message: string, error?: unknown): void => {
+  if (redisWarningShown) return;
+  redisWarningShown = true;
+  console.warn(message);
+  if (error) {
+    console.warn(error instanceof Error ? error.message : error);
+  }
+};
 
 export const isRedisHealthy = (): boolean =>
   redisHealthy && !!redisClient && redisClient.status === "ready";
 
 export const connectRedis = async (): Promise<void> => {
-  const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+  const redisUrl = process.env.REDIS_URL;
+
+  if (!redisUrl) {
+    redisHealthy = false;
+    warnRedisOnce("⚠️  Redis not configured — seat locking disabled");
+    return;
+  }
 
   try {
     redisClient = new Redis(redisUrl, {
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
       lazyConnect: true,
+      retryStrategy: () => null,
+      reconnectOnError: () => false,
     });
 
     redisClient.on("ready", () => {
       redisHealthy = true;
+      redisWarningShown = false;
       console.log("✅ Redis connected");
     });
 
     redisClient.on("error", (error) => {
       redisHealthy = false;
-      console.warn("⚠️  Redis error:", error.message);
+      warnRedisOnce("⚠️  Redis error — seat locking disabled", error);
     });
 
     redisClient.on("close", () => {
       redisHealthy = false;
-      console.warn("⚠️  Redis connection closed — seat locking disabled");
+      warnRedisOnce("⚠️  Redis connection closed — seat locking disabled");
     });
 
     redisClient.on("end", () => {
       redisHealthy = false;
-      console.warn("⚠️  Redis connection ended — seat locking disabled");
+      warnRedisOnce("⚠️  Redis connection ended — seat locking disabled");
     });
 
     await redisClient.connect();
     redisHealthy = redisClient.status === "ready";
 
     if (!redisHealthy) {
-      console.warn("⚠️  Redis not ready — seat locking disabled");
+      warnRedisOnce("⚠️  Redis not ready — seat locking disabled");
     }
   } catch (error) {
     redisHealthy = false;
-    console.warn("⚠️  Redis not available — seat locking disabled");
-    console.warn(error instanceof Error ? error.message : error);
+    warnRedisOnce("⚠️  Redis not available — seat locking disabled", error);
   }
 };
 
@@ -76,8 +94,10 @@ export const lockSeat = async (
     return result === "OK";
   } catch (error) {
     redisHealthy = false;
-    console.warn("⚠️  Redis lock failed — continuing without seat lock");
-    console.warn(error instanceof Error ? error.message : error);
+    warnRedisOnce(
+      "⚠️  Redis lock failed — continuing without seat lock",
+      error,
+    );
     return true;
   }
 };
@@ -93,8 +113,7 @@ export const unlockSeat = async (
     await redisClient!.del(key);
   } catch (error) {
     redisHealthy = false;
-    console.warn("⚠️  Redis unlock failed");
-    console.warn(error instanceof Error ? error.message : error);
+    warnRedisOnce("⚠️  Redis unlock failed");
   }
 };
 
