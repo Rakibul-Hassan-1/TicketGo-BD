@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
-import { generateForSchedule } from "../jobs/recurrence.job";
+import {
+  generateForSchedule,
+  syncRecurringSchedule,
+} from "../jobs/recurrence.job";
 import { RecurringSchedule } from "../models/RecurringSchedule";
 import { sendError, sendSuccess } from "../utils/apiResponse";
 
@@ -59,7 +62,14 @@ export const updateRecurring = async (req: Request, res: Response) => {
       { new: true },
     );
     if (!doc) return sendError(res, "Not found", 404);
-    sendSuccess(res, { recurring: doc }, "Updated");
+
+    await syncRecurringSchedule(doc._id.toString(), 30);
+
+    sendSuccess(
+      res,
+      { recurring: doc },
+      "Updated and regenerated future trips",
+    );
   } catch (err: any) {
     sendError(res, err?.message || "Failed to update recurring", 500);
   }

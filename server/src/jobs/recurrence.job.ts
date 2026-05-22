@@ -135,3 +135,20 @@ export async function generateForSchedule(scheduleId: string, windowDays = 30) {
     );
   }
 }
+
+export async function syncRecurringSchedule(
+  scheduleId: string,
+  windowDays = 30,
+) {
+  const s = await RecurringSchedule.findById(scheduleId);
+  if (!s) return;
+
+  const cutoff = DateTime.utc().toJSDate();
+  await Trip.deleteMany({
+    recurrenceId: s.recurrenceId,
+    departureTime: { $gte: cutoff },
+  });
+
+  if (!s.enabled) return;
+  await generateForSchedule(scheduleId, windowDays);
+}
