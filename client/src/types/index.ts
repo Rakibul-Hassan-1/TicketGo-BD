@@ -3,7 +3,7 @@ export interface User {
   name: string;
   email: string;
   phone: string;
-  role: 'user' | 'admin' | 'operator';
+  role: "user" | "admin" | "operator";
   isActive: boolean;
   avatar?: string;
   createdAt: string;
@@ -11,15 +11,15 @@ export interface User {
 
 export interface Seat {
   number: string;
-  type: 'window' | 'aisle';
-  deck: 'lower' | 'upper';
+  type: "window" | "aisle";
+  deck: "lower" | "upper";
 }
 
 export interface Bus {
   _id: string;
   busName: string;
   busNumber: string;
-  type: 'AC' | 'Non-AC' | 'Sleeper' | 'Semi-Sleeper';
+  type: "AC" | "Non-AC" | "Sleeper" | "Semi-Sleeper";
   totalSeats: number;
   seats: Seat[];
   operator: { _id: string; name: string; phone?: string };
@@ -42,13 +42,13 @@ export interface Trip {
   fare: number;
   availableSeats: string[];
   bookedSeats: string[];
-  status: 'scheduled' | 'departed' | 'arrived' | 'cancelled';
+  status: "scheduled" | "departed" | "arrived" | "cancelled";
 }
 
 export interface Passenger {
   name: string;
   age: number;
-  gender: 'male' | 'female' | 'other';
+  gender: "male" | "female" | "other";
   seatNumber: string;
 }
 
@@ -60,8 +60,8 @@ export interface Booking {
   passengers: Passenger[];
   seats: string[];
   totalAmount: number;
-  paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
-  bookingStatus: 'pending' | 'confirmed' | 'cancelled';
+  paymentStatus: "pending" | "paid" | "failed" | "refunded";
+  bookingStatus: "pending" | "hold" | "confirmed" | "cancelled";
   transactionId?: string;
   ticketUrl?: string;
   createdAt: string;
