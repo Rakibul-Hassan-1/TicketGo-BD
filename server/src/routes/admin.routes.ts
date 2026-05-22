@@ -7,6 +7,13 @@ import {
   getDashboardStats,
 } from "../controllers/admin.controller";
 import { finalizeBookingApproval } from "../controllers/payment.controller";
+import {
+  createRecurring,
+  deleteRecurring,
+  getRecurring,
+  listRecurrings,
+  updateRecurring,
+} from "../controllers/recurrence.controller";
 import { io } from "../index";
 import { authorize, protect } from "../middleware/auth";
 import { Booking } from "../models/Booking";
@@ -103,6 +110,23 @@ router.patch("/users/:id/toggle-status", async (req, res) => {
 
   await user.save();
   sendSuccess(res, { user }, "User updated");
+});
+
+// Recurring schedules management
+router.post("/recurrings", createRecurring);
+router.get("/recurrings", listRecurrings);
+router.get("/recurrings/:id", getRecurring);
+router.patch("/recurrings/:id", updateRecurring);
+router.delete("/recurrings/:id", deleteRecurring);
+router.post("/recurrings/:id/apply", async (req, res) => {
+  try {
+    // forward to controller helper
+    const { applyRecurringNow } =
+      await import("../controllers/recurrence.controller");
+    return applyRecurringNow(req, res);
+  } catch (err: any) {
+    sendError(res, err?.message || "Failed", 500);
+  }
 });
 
 export default router;

@@ -9,6 +9,7 @@ import { Server } from "socket.io";
 import { connectDB } from "./config/database";
 import { connectRedis } from "./config/redis";
 import { initSocket } from "./config/socket";
+import { startRecurrenceGenerator } from "./jobs/recurrence.job";
 import { errorHandler } from "./middleware/errorHandler";
 import { rateLimiter } from "./middleware/rateLimiter";
 
@@ -75,6 +76,8 @@ async function bootstrap() {
   await connectDB();
   await connectRedis();
   initSocket(io);
+  // start background recurrence generator
+  startRecurrenceGenerator();
 
   httpServer.listen(PORT, () => {
     console.log(`🚀 TicketGo BD server running on port ${PORT}`);

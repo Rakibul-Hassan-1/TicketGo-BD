@@ -158,6 +158,22 @@ export default function AdminPage() {
   const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(
     null,
   );
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const [scheduleModal, setScheduleModal] = useState<any>(null);
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(
+    null,
+  );
+  const [scheduleForm, setScheduleForm] = useState<any>({
+    title: "",
+    bus: "",
+    route: { from: "", to: "", distance: "" },
+    daysOfWeek: [] as number[],
+    departureTime: "15:00",
+    startDate: new Date().toISOString().slice(0, 10),
+    endDate: "",
+    timezone: "Asia/Dhaka",
+    meta: { fare: 0 },
+  });
 
   useEffect(() => {
     if (!user) {
@@ -178,8 +194,9 @@ export default function AdminPage() {
       api.get("/buses"),
       api.get("/operator/my-trips"),
       api.get("/admin/bookings"),
+      api.get("/admin/recurrings"),
     ])
-      .then(([d, u, b, t, bk]) => {
+      .then(([d, u, b, t, bk, rs]) => {
         setStats(d.data.data.stats);
         setRecentBookings(
           d.data.data.recentBookings.filter(
@@ -194,6 +211,7 @@ export default function AdminPage() {
             (x: any) => x.bookingStatus !== "cancelled",
           ),
         );
+        setSchedules(rs.data.data.list || []);
         setOperators(
           u.data.data.users.filter((x: any) => x.role === "operator"),
         );
@@ -374,6 +392,121 @@ export default function AdminPage() {
     }
   };
 
+  // ── RECURRENCE SCHEDULES ─────────────────────────────────────────────
+  const openAddSchedule = () => {
+    setEditingScheduleId(null);
+    setScheduleForm({
+      title: "",
+      bus: "",
+      route: { from: "", to: "", distance: "" },
+      daysOfWeek: [],
+      departureTime: "15:00",
+      startDate: new Date().toISOString().slice(0, 10),
+      endDate: "",
+      timezone: "Asia/Dhaka",
+      meta: { fare: 0 },
+    });
+    setScheduleModal("add");
+  };
+
+  const openEditSchedule = (schedule: any) => {
+    setEditingScheduleId(schedule._id);
+    setScheduleForm({
+      title: schedule.title || "",
+      bus: schedule.bus?._id || schedule.bus || "",
+      route: {
+        from: schedule.route?.from || "",
+        to: schedule.route?.to || "",
+        distance: schedule.route?.distance ?? "",
+      },
+      daysOfWeek: schedule.daysOfWeek || [],
+      departureTime: schedule.departureTime || "15:00",
+      startDate: schedule.startDate
+        ? new Date(schedule.startDate).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10),
+      endDate: schedule.endDate
+        ? new Date(schedule.endDate).toISOString().slice(0, 10)
+        : "",
+      timezone: schedule.timezone || "Asia/Dhaka",
+      meta: { fare: schedule.meta?.fare || 0 },
+    });
+    setScheduleModal("edit");
+  };
+
+  const toggleDay = (d: number) => {
+    setScheduleForm((s: any) => {
+      const set = new Set(s.daysOfWeek || []);
+      if (set.has(d)) set.delete(d);
+      else set.add(d);
+      return { ...s, daysOfWeek: Array.from(set) };
+    });
+  };
+
+  const saveSchedule = async () => {
+    try {
+      setSaving(true);
+      const isEditing = Boolean(editingScheduleId);
+      const payload = {
+        ...scheduleForm,
+        route: {
+          ...scheduleForm.route,
+          distance: Number(scheduleForm.route.distance),
+        },
+        startDate: scheduleForm.startDate,
+        endDate: scheduleForm.endDate || undefined,
+        meta: {
+          ...scheduleForm.meta,
+          fare: Number(scheduleForm.meta?.fare || 0),
+        },
+      };
+      if (isEditing) {
+        const res = await api.patch(
+          `/admin/recurrings/${editingScheduleId}`,
+          payload,
+        );
+        const updated = res.data.data.recurring;
+        setSchedules((p) =>
+          p.map((item) => (item._id === editingScheduleId ? updated : item)),
+        );
+      } else {
+        const res = await api.post("/admin/recurrings", payload);
+        const created = res.data.data.recurring;
+        setSchedules((p) => [created, ...p]);
+      }
+      setScheduleModal(null);
+      setEditingScheduleId(null);
+      toast.success(
+        isEditing
+          ? "Recurring schedule updated"
+          : "Recurring schedule created and generated",
+      );
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || "Failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteSchedule = async (schedule: any) => {
+    if (!confirm(`Delete schedule \"${schedule.title}\"?`)) return;
+    try {
+      await api.delete(`/admin/recurrings/${schedule._id}`);
+      setSchedules((p) => p.filter((item) => item._id !== schedule._id));
+      toast.success("Recurring schedule deleted");
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || "Failed");
+    }
+  };
+
+  const materializeNow = async (id: string) => {
+    try {
+      await api.post(`/admin/recurrings/${id}/apply?months=1`);
+      toast.success("Materialized for next month");
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || "Failed");
+    }
+  };
+
   if (loading)
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -385,6 +518,7 @@ export default function AdminPage() {
     { id: "overview", label: "Overview", icon: LayoutDashboard },
     { id: "buses", label: "Buses", icon: Bus },
     { id: "trips", label: "Trips & Routes", icon: Route },
+    { id: "schedules", label: "Schedules", icon: TrendingUp },
     { id: "users", label: "Users", icon: Users },
     { id: "bookings", label: "Bookings", icon: BookOpen },
   ];
@@ -668,6 +802,275 @@ export default function AdminPage() {
                   ))
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ── SCHEDULES ── */}
+          {tab === "schedules" && (
+            <div>
+              <div className="flex items-center justify-between mb-5">
+                <h1 className="text-xl font-bold text-gray-900">
+                  Recurring Schedules
+                </h1>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={openAddSchedule}
+                    className="flex items-center gap-2 bg-primary-600 text-white px-3 py-2 rounded-lg text-sm"
+                  >
+                    <Plus className="w-4 h-4" /> Add Schedule
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border divide-y">
+                {schedules.length === 0 ? (
+                  <p className="text-center py-12 text-gray-400 text-sm">
+                    No schedules yet
+                  </p>
+                ) : (
+                  schedules.map((s: any) => (
+                    <div
+                      key={s._id}
+                      className="p-4 flex items-center justify-between"
+                    >
+                      <div>
+                        <p className="font-semibold text-gray-900">{s.title}</p>
+                        <p className="text-xs text-gray-500">
+                          {s.route?.from} → {s.route?.to} · {s.departureTime}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openEditSchedule(s)}
+                          className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:text-primary-600 hover:border-primary-300"
+                          title="Edit schedule"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => materializeNow(s._id)}
+                          className="text-sm px-3 py-1 rounded-lg border"
+                        >
+                          Materialize
+                        </button>
+                        <button
+                          onClick={() => deleteSchedule(s)}
+                          className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:text-red-600 hover:border-red-300"
+                          title="Delete schedule"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {scheduleModal && (
+                <Modal
+                  title={
+                    scheduleModal === "add"
+                      ? "Add Recurring Schedule"
+                      : "Edit Recurring Schedule"
+                  }
+                  onClose={() => {
+                    setScheduleModal(null);
+                    setEditingScheduleId(null);
+                  }}
+                >
+                  <div className="space-y-3">
+                    <Field label="Title">
+                      <input
+                        value={scheduleForm.title}
+                        onChange={(e) =>
+                          setScheduleForm((p: any) => ({
+                            ...p,
+                            title: e.target.value,
+                          }))
+                        }
+                        className={inp}
+                      />
+                    </Field>
+                    <Field label="Bus">
+                      <select
+                        value={scheduleForm.bus}
+                        onChange={(e) =>
+                          setScheduleForm((p: any) => ({
+                            ...p,
+                            bus: e.target.value,
+                          }))
+                        }
+                        className={inp}
+                      >
+                        <option value="">Select bus</option>
+                        {buses.map((b: any) => (
+                          <option key={b._id} value={b._id}>
+                            {b.busName} - {b.busNumber}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Route From/To">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <select
+                          value={scheduleForm.route.from}
+                          onChange={(e) =>
+                            setScheduleForm((p: any) => ({
+                              ...p,
+                              route: { ...p.route, from: e.target.value },
+                            }))
+                          }
+                          className={inp}
+                        >
+                          <option value="">Select departure city</option>
+                          {BD_CITIES.map((city) => (
+                            <option key={`from-${city}`} value={city}>
+                              {city}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={scheduleForm.route.to}
+                          onChange={(e) =>
+                            setScheduleForm((p: any) => ({
+                              ...p,
+                              route: { ...p.route, to: e.target.value },
+                            }))
+                          }
+                          className={inp}
+                        >
+                          <option value="">Select destination city</option>
+                          {BD_CITIES.filter(
+                            (city) => city !== scheduleForm.route.from,
+                          ).map((city) => (
+                            <option key={`to-${city}`} value={city}>
+                              {city}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </Field>
+                    <Field label="Distance (km)">
+                      <input
+                        value={scheduleForm.route.distance}
+                        onChange={(e) =>
+                          setScheduleForm((p: any) => ({
+                            ...p,
+                            route: { ...p.route, distance: e.target.value },
+                          }))
+                        }
+                        className={inp}
+                        placeholder="320"
+                        type="number"
+                        min="0"
+                      />
+                    </Field>
+                    <Field label="Fare">
+                      <input
+                        value={scheduleForm.meta?.fare || ""}
+                        onChange={(e) =>
+                          setScheduleForm((p: any) => ({
+                            ...p,
+                            meta: { ...p.meta, fare: e.target.value },
+                          }))
+                        }
+                        className={inp}
+                        placeholder="1200"
+                        type="number"
+                        min="0"
+                      />
+                    </Field>
+                    <Field label="Days">
+                      <div className="flex gap-2 flex-wrap text-sm">
+                        <button
+                          onClick={() => toggleDay(0)}
+                          className={`px-2 py-1 rounded ${scheduleForm.daysOfWeek?.includes(0) ? "bg-primary-600 text-white" : "bg-gray-100"}`}
+                        >
+                          Sun
+                        </button>
+                        <button
+                          onClick={() => toggleDay(1)}
+                          className={`px-2 py-1 rounded ${scheduleForm.daysOfWeek?.includes(1) ? "bg-primary-600 text-white" : "bg-gray-100"}`}
+                        >
+                          Mon
+                        </button>
+                        <button
+                          onClick={() => toggleDay(2)}
+                          className={`px-2 py-1 rounded ${scheduleForm.daysOfWeek?.includes(2) ? "bg-primary-600 text-white" : "bg-gray-100"}`}
+                        >
+                          Tue
+                        </button>
+                        <button
+                          onClick={() => toggleDay(3)}
+                          className={`px-2 py-1 rounded ${scheduleForm.daysOfWeek?.includes(3) ? "bg-primary-600 text-white" : "bg-gray-100"}`}
+                        >
+                          Wed
+                        </button>
+                        <button
+                          onClick={() => toggleDay(4)}
+                          className={`px-2 py-1 rounded ${scheduleForm.daysOfWeek?.includes(4) ? "bg-primary-600 text-white" : "bg-gray-100"}`}
+                        >
+                          Thu
+                        </button>
+                        <button
+                          onClick={() => toggleDay(5)}
+                          className={`px-2 py-1 rounded ${scheduleForm.daysOfWeek?.includes(5) ? "bg-primary-600 text-white" : "bg-gray-100"}`}
+                        >
+                          Fri
+                        </button>
+                        <button
+                          onClick={() => toggleDay(6)}
+                          className={`px-2 py-1 rounded ${scheduleForm.daysOfWeek?.includes(6) ? "bg-primary-600 text-white" : "bg-gray-100"}`}
+                        >
+                          Sat
+                        </button>
+                      </div>
+                    </Field>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <Field label="Departure time">
+                        <input
+                          value={scheduleForm.departureTime}
+                          onChange={(e) =>
+                            setScheduleForm((p: any) => ({
+                              ...p,
+                              departureTime: e.target.value,
+                            }))
+                          }
+                          className={inp}
+                          type="time"
+                        />
+                      </Field>
+                      <Field label="Start date">
+                        <input
+                          value={scheduleForm.startDate}
+                          onChange={(e) =>
+                            setScheduleForm((p: any) => ({
+                              ...p,
+                              startDate: e.target.value,
+                            }))
+                          }
+                          className={inp}
+                          type="date"
+                        />
+                      </Field>
+                    </div>
+                    <div className="flex items-center gap-2 justify-end">
+                      <button
+                        onClick={() => setScheduleModal(null)}
+                        className="px-3 py-2 rounded border"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={saveSchedule}
+                        className="px-3 py-2 rounded bg-primary-600 text-white"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                </Modal>
+              )}
             </div>
           )}
 
