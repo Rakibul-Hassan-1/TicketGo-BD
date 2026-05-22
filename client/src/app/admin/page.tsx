@@ -395,7 +395,7 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <div className="max-w-7xl mx-auto px-4 py-6 flex gap-6">
+      <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col md:flex-row gap-4 md:gap-6">
         {/* Sidebar */}
         <aside className="w-52 flex-shrink-0 hidden md:block">
           <div className="bg-white rounded-2xl border p-3 sticky top-20">
@@ -417,11 +417,11 @@ export default function AdminPage() {
         </aside>
 
         {/* Mobile tabs */}
-        <div className="md:hidden w-full mb-0">
+        <div className="md:hidden w-full">
           <select
             value={tab}
             onChange={(e) => setTab(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-sm mb-4"
+            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm shadow-sm"
           >
             {tabs.map((t) => (
               <option key={t.id} value={t.id}>
@@ -432,7 +432,7 @@ export default function AdminPage() {
         </div>
 
         {/* Main content */}
-        <main className="flex-1 min-w-0">
+        <main className="flex-1 min-w-0 w-full">
           {/* ── OVERVIEW ── */}
           {tab === "overview" && (
             <div>
@@ -440,7 +440,7 @@ export default function AdminPage() {
                 Dashboard Overview
               </h1>
               {stats && (
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
                   {[
                     {
                       label: "Users",
@@ -495,7 +495,7 @@ export default function AdminPage() {
                   {recentBookings.map((b: any) => (
                     <div
                       key={b._id}
-                      className="p-4 flex items-center justify-between text-sm"
+                      className="p-4 flex flex-col sm:flex-row sm:items-center justify-between text-sm gap-3"
                     >
                       <div>
                         <p className="font-medium text-gray-900">
@@ -538,7 +538,7 @@ export default function AdminPage() {
           {/* ── BUSES ── */}
           {tab === "buses" && (
             <div>
-              <div className="flex items-center justify-between mb-5">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
                 <h1 className="text-xl font-bold text-gray-900">
                   Manage Buses
                 </h1>
@@ -558,7 +558,7 @@ export default function AdminPage() {
                   buses.map((b: any) => (
                     <div
                       key={b._id}
-                      className="p-4 flex items-center justify-between"
+                      className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                     >
                       <div>
                         <p className="font-semibold text-gray-900 text-sm">
@@ -602,7 +602,7 @@ export default function AdminPage() {
           {/* ── TRIPS ── */}
           {tab === "trips" && (
             <div>
-              <div className="flex items-center justify-between mb-5">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
                 <h1 className="text-xl font-bold text-gray-900">
                   Manage Trips & Routes
                 </h1>
@@ -622,7 +622,7 @@ export default function AdminPage() {
                   trips.map((t: any) => (
                     <div
                       key={t._id}
-                      className="p-4 flex items-center justify-between"
+                      className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                     >
                       <div>
                         <p className="font-semibold text-gray-900 text-sm">
@@ -681,7 +681,7 @@ export default function AdminPage() {
                 {users.map((u: any) => (
                   <div
                     key={u._id}
-                    className="p-4 flex items-center justify-between gap-4"
+                    className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 font-semibold text-sm flex-shrink-0">
@@ -741,7 +741,7 @@ export default function AdminPage() {
                   visibleBookings.map((b: any) => (
                     <div
                       key={b._id}
-                      className="p-4 flex items-center justify-between gap-4"
+                      className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                     >
                       <div>
                         <p className="font-semibold text-gray-900 text-sm">
