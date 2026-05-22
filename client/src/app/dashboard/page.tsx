@@ -9,6 +9,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+const formatStatusLabel = (status: string) =>
+  status.charAt(0).toUpperCase() + status.slice(1);
+
 const statusColor: Record<string, string> = {
   confirmed: "bg-green-100 text-green-700",
   hold: "bg-amber-100 text-amber-700",
@@ -42,6 +45,7 @@ export default function DashboardPage() {
   const stats = {
     total: bookings.length,
     confirmed: bookings.filter((b) => b.bookingStatus === "confirmed").length,
+    cancelled: bookings.filter((b) => b.bookingStatus === "cancelled").length,
     pending: bookings.filter(
       (b) => b.bookingStatus === "pending" || b.bookingStatus === "hold",
     ).length,
@@ -59,7 +63,7 @@ export default function DashboardPage() {
           <p className="text-gray-500 text-sm">Welcome back, {user?.name}</p>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
           {[
             {
               label: "Total Bookings",
@@ -78,6 +82,12 @@ export default function DashboardPage() {
               value: stats.pending,
               icon: Clock,
               color: "text-yellow-600 bg-yellow-50",
+            },
+            {
+              label: "Cancelled",
+              value: stats.cancelled,
+              icon: Ticket,
+              color: "text-red-600 bg-red-50",
             },
             {
               label: "Total Spent",
@@ -127,10 +137,15 @@ export default function DashboardPage() {
             <div className="divide-y">
               {bookings.map((b) => {
                 const trip = b.trip as any;
+                const isCancelled = b.bookingStatus === "cancelled";
                 return (
                   <div
                     key={b._id}
-                    className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    className={`p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                      isCancelled
+                        ? "bg-red-50/70 border-l-4 border-red-400"
+                        : "bg-white"
+                    }`}
                   >
                     <div>
                       <p className="font-semibold text-gray-900 text-sm">
@@ -149,6 +164,12 @@ export default function DashboardPage() {
                       <p className="text-xs text-gray-500 mt-0.5">
                         Seats: {b.seats?.join(", ")}
                       </p>
+                      {isCancelled && (
+                        <p className="text-xs font-semibold text-red-700 mt-1.5">
+                          This trip was cancelled and is kept in your booking
+                          history.
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="text-right">
@@ -164,9 +185,9 @@ export default function DashboardPage() {
                       <span
                         className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColor[b.bookingStatus] || "bg-gray-100 text-gray-600"}`}
                       >
-                        {b.bookingStatus}
+                        {formatStatusLabel(b.bookingStatus)}
                       </span>
-                      {b.ticketUrl && (
+                      {b.ticketUrl && !isCancelled && (
                         <a
                           href={b.ticketUrl}
                           download

@@ -5,7 +5,11 @@ import {
   lockSeat,
   unlockSeat,
 } from "../config/redis";
-import { emitSeatLocked, emitSeatUnlocked } from "../config/socket";
+import {
+  emitSeatLocked,
+  emitSeatUnlocked,
+  emitSeatsUnbooked,
+} from "../config/socket";
 import { io } from "../index";
 import { AuthRequest } from "../middleware/auth";
 import { Booking } from "../models/Booking";
@@ -148,7 +152,9 @@ export const cancelBooking = async (
     $pull: { bookedSeats: { $in: booking.seats } },
     $push: { availableSeats: { $each: booking.seats } },
   });
-
+  // Notify clients that these seats were returned to available
+  emitSeatsUnbooked(io, tripId, booking.seats);
+  // Also clear any temporary locks
   emitSeatUnlocked(io, tripId, booking.seats);
   sendSuccess(res, { booking }, "Booking cancelled");
 };

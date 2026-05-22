@@ -16,7 +16,15 @@ import {
   toggleSeat,
 } from "@/store/slices/bookingSlice";
 import { Trip } from "@/types";
-import { Loader2, MapPin, Clock, CreditCard, Users, AlertCircle, CheckCircle2 } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  CreditCard,
+  Loader2,
+  MapPin,
+  Users,
+} from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import toast from "react-hot-toast";
@@ -35,7 +43,10 @@ type SeatRow = {
 
 // ─── Seat shape SVG rendered as a real cushioned bus seat ───────────────────
 function SeatIcon({ status, number }: { status: SeatStatus; number: string }) {
-  const colors: Record<SeatStatus, { body: string; top: string; text: string; shadow: string }> = {
+  const colors: Record<
+    SeatStatus,
+    { body: string; top: string; text: string; shadow: string }
+  > = {
     available: {
       body: "#ffffff",
       top: "#e2e8f0",
@@ -70,17 +81,44 @@ function SeatIcon({ status, number }: { status: SeatStatus; number: string }) {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className="w-full h-full"
-      style={{ filter: c.shadow !== "none" ? `drop-shadow(0 3px 6px ${c.shadow})` : "none" }}
+      style={{
+        filter:
+          c.shadow !== "none" ? `drop-shadow(0 3px 6px ${c.shadow})` : "none",
+      }}
     >
       {/* Seat back / headrest */}
       <rect x="4" y="2" width="36" height="18" rx="8" fill={c.top} />
       {/* Headrest cushion highlight */}
-      <rect x="9" y="5" width="26" height="10" rx="5" fill={c.body} opacity="0.6" />
+      <rect
+        x="9"
+        y="5"
+        width="26"
+        height="10"
+        rx="5"
+        fill={c.body}
+        opacity="0.6"
+      />
       {/* Seat cushion */}
       <rect x="2" y="22" width="40" height="22" rx="6" fill={c.body} />
       {/* Cushion crease lines */}
-      <line x1="14" y1="26" x2="14" y2="40" stroke={c.top} strokeWidth="1.5" strokeLinecap="round" />
-      <line x1="30" y1="26" x2="30" y2="40" stroke={c.top} strokeWidth="1.5" strokeLinecap="round" />
+      <line
+        x1="14"
+        y1="26"
+        x2="14"
+        y2="40"
+        stroke={c.top}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <line
+        x1="30"
+        y1="26"
+        x2="30"
+        y2="40"
+        stroke={c.top}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
       {/* Armrests */}
       <rect x="0" y="24" width="4" height="14" rx="2" fill={c.top} />
       <rect x="40" y="24" width="4" height="14" rx="2" fill={c.top} />
@@ -171,14 +209,80 @@ function SeatSelector() {
     connectSocket();
     joinTripRoom(tripId);
     const socket = getSocket();
-    socket.on("seat:locked", (seats: string[]) => dispatch(addLockedSeat(seats)));
-    socket.on("seat:unlocked", (seats: string[]) => dispatch(removeLockedSeat(seats)));
-    socket.on("seats:locked", (seats: string[]) => dispatch(setLockedSeats(seats)));
+
+    const isCurrentTrip = (payload: { tripId: string; seats: string[] }) =>
+      payload.tripId === tripId;
+
+    const onSeatLocked = (payload: { tripId: string; seats: string[] }) => {
+      if (!isCurrentTrip(payload)) return;
+      dispatch(addLockedSeat(payload.seats));
+    };
+
+    const onSeatUnlocked = (payload: { tripId: string; seats: string[] }) => {
+      if (!isCurrentTrip(payload)) return;
+      dispatch(removeLockedSeat(payload.seats));
+    };
+
+    const onSeatsBooked = (payload: { tripId: string; seats: string[] }) => {
+      if (!isCurrentTrip(payload)) return;
+      dispatch(removeLockedSeat(payload.seats));
+      setTrip((current) => {
+        if (!current) return current;
+
+        const bookedSeats = Array.from(
+          new Set([...(current.bookedSeats || []), ...payload.seats]),
+        );
+        const availableSeats = (current.availableSeats || []).filter(
+          (seat) => !payload.seats.includes(seat),
+        );
+
+        return {
+          ...current,
+          bookedSeats,
+          availableSeats,
+        } as Trip;
+      });
+    };
+
+    const onSeatsUnbooked = (payload: { tripId: string; seats: string[] }) => {
+      if (!isCurrentTrip(payload)) return;
+      dispatch(removeLockedSeat(payload.seats));
+      setTrip((current) => {
+        if (!current) return current;
+
+        const bookedSeats = (current.bookedSeats || []).filter(
+          (seat) => !payload.seats.includes(seat),
+        );
+        const availableSeats = Array.from(
+          new Set([...(current.availableSeats || []), ...payload.seats]),
+        );
+
+        return {
+          ...current,
+          bookedSeats,
+          availableSeats,
+        } as Trip;
+      });
+    };
+
+    const onSeatsLocked = (payload: { tripId: string; seats: string[] }) => {
+      if (!isCurrentTrip(payload)) return;
+      dispatch(setLockedSeats(payload.seats));
+    };
+
+    socket.on("seat:locked", onSeatLocked);
+    socket.on("seat:unlocked", onSeatUnlocked);
+    socket.on("seats:booked", onSeatsBooked);
+    socket.on("seats:unbooked", onSeatsUnbooked);
+    socket.on("seats:locked", onSeatsLocked);
+
     return () => {
       leaveTripRoom(tripId);
-      socket.off("seat:locked");
-      socket.off("seat:unlocked");
-      socket.off("seats:locked");
+      socket.off("seat:locked", onSeatLocked);
+      socket.off("seat:unlocked", onSeatUnlocked);
+      socket.off("seats:booked", onSeatsBooked);
+      socket.off("seats:unbooked", onSeatsUnbooked);
+      socket.off("seats:locked", onSeatsLocked);
     };
   }, [tripId, dispatch]);
 
@@ -189,7 +293,10 @@ function SeatSelector() {
     return "available";
   };
 
-  const renderSeatButton = (seat: Trip["bus"]["seats"][number] | null, _colLabel?: string) => {
+  const renderSeatButton = (
+    seat: Trip["bus"]["seats"][number] | null,
+    _colLabel?: string,
+  ) => {
     if (!seat) return <div className="w-11 h-[52px]" />;
     const status = getSeatStatus(seat.number);
     const disabled = status === "booked" || status === "locked";
@@ -202,7 +309,9 @@ function SeatSelector() {
         aria-label={`Seat ${seat.number} - ${status}`}
         className={[
           "relative w-11 h-[52px] transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-blue-400 rounded-lg",
-          status === "available" ? "hover:scale-110 hover:-translate-y-0.5 cursor-pointer" : "",
+          status === "available"
+            ? "hover:scale-110 hover:-translate-y-0.5 cursor-pointer"
+            : "",
           status === "selected" ? "scale-105 cursor-pointer" : "",
           disabled ? "cursor-not-allowed opacity-80" : "",
         ].join(" ")}
@@ -248,27 +357,34 @@ function SeatSelector() {
       <div className="flex justify-center items-center py-32">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
-          <p className="text-sm text-slate-500 font-medium">Loading seat map…</p>
+          <p className="text-sm text-slate-500 font-medium">
+            Loading seat map…
+          </p>
         </div>
       </div>
     );
   if (!trip) return null;
 
-  const availableCount =
-    (trip.bus.totalSeats || 0) -
-    (trip.bookedSeats?.length || 0) -
-    lockedSeats.length;
+  const serverAvailableSeats = trip.availableSeats || [];
+  const availableCount = serverAvailableSeats.filter(
+    (seat) => !lockedSeats.includes(seat),
+  ).length;
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
-
       {/* ── Trip Info Card ───────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start gap-4">
             {/* Bus icon block */}
             <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6 text-blue-600" stroke="currentColor" strokeWidth="1.8">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                className="w-6 h-6 text-blue-600"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
                 <rect x="1" y="5" width="22" height="13" rx="3" />
                 <path d="M1 10h22M7 18v2M17 18v2" />
                 <circle cx="5.5" cy="15.5" r="1.5" fill="currentColor" />
@@ -277,7 +393,9 @@ function SeatSelector() {
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-bold text-slate-900 text-lg leading-tight">{trip.bus.busName}</p>
+                <p className="font-bold text-slate-900 text-lg leading-tight">
+                  {trip.bus.busName}
+                </p>
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold tracking-wide bg-blue-100 text-blue-700 uppercase">
                   {trip.bus.type}
                 </span>
@@ -295,13 +413,18 @@ function SeatSelector() {
                 </span>
                 <span className="flex items-center gap-1">
                   <Users className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="text-green-600 font-medium">{availableCount}</span> seats left
+                  <span className="text-green-600 font-medium">
+                    {availableCount}
+                  </span>{" "}
+                  seats left
                 </span>
               </div>
             </div>
           </div>
           <div className="text-right flex-shrink-0">
-            <p className="text-2xl font-extrabold text-blue-600 tracking-tight">{formatCurrency(trip.fare)}</p>
+            <p className="text-2xl font-extrabold text-blue-600 tracking-tight">
+              {formatCurrency(trip.fare)}
+            </p>
             <p className="text-xs text-slate-400 mt-0.5">per seat</p>
           </div>
         </div>
@@ -309,16 +432,19 @@ function SeatSelector() {
 
       {/* ── Main Grid ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
         {/* ── Seat Map Card ──────────────────────────────────────────────── */}
         <div className="lg:col-span-2">
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             {/* Card header */}
             <div className="px-6 py-4 border-b border-slate-50 flex items-center justify-between">
               <div>
-                <h2 className="font-bold text-slate-800 text-base">Choose Your Seats</h2>
+                <h2 className="font-bold text-slate-800 text-base">
+                  Choose Your Seats
+                </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  {isBusinessLayout ? "1+2 Business Class layout" : "2+2 Economy layout"}
+                  {isBusinessLayout
+                    ? "1+2 Business Class layout"
+                    : "2+2 Economy layout"}
                 </p>
               </div>
               {/* Legend */}
@@ -344,11 +470,11 @@ function SeatSelector() {
               <div
                 className="relative rounded-3xl border-2 border-slate-200 bg-slate-50 overflow-hidden"
                 style={{
-                  background: "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)",
+                  background:
+                    "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)",
                   boxShadow: "inset 0 2px 12px rgba(0,0,0,0.04)",
                 }}
               >
-
                 {/* ── Driver / Front section ────────────────────────────── */}
                 <div className="relative flex items-center justify-center pt-5 pb-4 border-b-2 border-dashed border-slate-200">
                   {/* Windshield hint */}
@@ -359,7 +485,9 @@ function SeatSelector() {
                     <div className="w-5 h-8 rounded-sm border-2 border-slate-300 bg-slate-200 flex items-center justify-center">
                       <div className="w-1 h-4 bg-slate-400 rounded-full" />
                     </div>
-                    <span className="text-[9px] text-slate-400 font-medium">DOOR</span>
+                    <span className="text-[9px] text-slate-400 font-medium">
+                      DOOR
+                    </span>
                   </div>
 
                   {/* Steering wheel + driver */}
@@ -369,7 +497,9 @@ function SeatSelector() {
                       <div className="absolute top-1/2 left-0 right-0 h-[2.5px] bg-slate-300 -translate-y-1/2 mx-1" />
                       <div className="absolute top-0 bottom-0 left-1/2 w-[2.5px] bg-slate-300 -translate-x-1/2 my-1" />
                     </div>
-                    <span className="text-[10px] font-semibold text-slate-500 tracking-widest uppercase">Driver</span>
+                    <span className="text-[10px] font-semibold text-slate-500 tracking-widest uppercase">
+                      Driver
+                    </span>
                   </div>
 
                   {/* Emergency exit right */}
@@ -377,7 +507,9 @@ function SeatSelector() {
                     <div className="w-5 h-8 rounded-sm border-2 border-orange-300 bg-orange-100 flex items-center justify-center">
                       <div className="w-1 h-4 bg-orange-400 rounded-full" />
                     </div>
-                    <span className="text-[9px] text-orange-500 font-medium">EXIT</span>
+                    <span className="text-[9px] text-orange-500 font-medium">
+                      EXIT
+                    </span>
                   </div>
                 </div>
 
@@ -391,18 +523,32 @@ function SeatSelector() {
                 >
                   {isBusinessLayout ? (
                     <>
-                      <span className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">A</span>
+                      <span className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">
+                        A
+                      </span>
                       <span />
-                      <span className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">B</span>
-                      <span className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">C</span>
+                      <span className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">
+                        B
+                      </span>
+                      <span className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">
+                        C
+                      </span>
                     </>
                   ) : (
                     <>
-                      <span className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">A</span>
-                      <span className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">B</span>
+                      <span className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">
+                        A
+                      </span>
+                      <span className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">
+                        B
+                      </span>
                       <span />
-                      <span className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">C</span>
-                      <span className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">D</span>
+                      <span className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">
+                        C
+                      </span>
+                      <span className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">
+                        D
+                      </span>
                     </>
                   )}
                 </div>
@@ -411,19 +557,20 @@ function SeatSelector() {
                 <div className="px-4 pb-4 space-y-2">
                   {seatRows.map((row, rowIndex) => (
                     <div key={rowIndex} className="flex items-center gap-0">
-
                       {/* Row number */}
                       <div className="w-6 flex-shrink-0 text-center text-[10px] font-semibold text-slate-300">
                         {rowIndex + 1}
                       </div>
 
                       {/* Left seats */}
-                      <div className={`flex gap-1.5 ${isBusinessLayout ? "flex-1" : "flex-[2]"} justify-end pr-1`}>
-                        {row.left.map((block, i) =>
+                      <div
+                        className={`flex gap-1.5 ${isBusinessLayout ? "flex-1" : "flex-[2]"} justify-end pr-1`}
+                      >
+                        {row.left.map((block, i) => (
                           <div key={i} className="flex justify-center">
                             {renderSeatButton(block.seat)}
                           </div>
-                        )}
+                        ))}
                       </div>
 
                       {/* Aisle */}
@@ -437,7 +584,10 @@ function SeatSelector() {
                         >
                           <span
                             className="text-[8px] font-bold tracking-[0.25em] text-slate-300 uppercase"
-                            style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
+                            style={{
+                              writingMode: "vertical-rl",
+                              textOrientation: "mixed",
+                            }}
                           >
                             AISLE
                           </span>
@@ -445,12 +595,14 @@ function SeatSelector() {
                       </div>
 
                       {/* Right seats */}
-                      <div className={`flex gap-1.5 ${isBusinessLayout ? "flex-[2]" : "flex-[2]"} justify-start pl-1`}>
-                        {row.right.map((block, i) =>
+                      <div
+                        className={`flex gap-1.5 ${isBusinessLayout ? "flex-[2]" : "flex-[2]"} justify-start pl-1`}
+                      >
+                        {row.right.map((block, i) => (
                           <div key={i} className="flex justify-center">
                             {renderSeatButton(block.seat)}
                           </div>
-                        )}
+                        ))}
                       </div>
 
                       {/* Spacer for row number balance */}
@@ -462,10 +614,11 @@ function SeatSelector() {
                 {/* ── Rear bumper ───────────────────────────────────────── */}
                 <div className="mx-4 mb-4 rounded-xl border border-dashed border-slate-200 bg-white/60 py-2.5 text-center">
                   <span className="text-[11px] font-semibold tracking-widest text-slate-400 uppercase">
-                    {isBusinessLayout ? "✦ Business Class · 1+2 ✦" : "✦ Economy Class · 2+2 ✦"}
+                    {isBusinessLayout
+                      ? "✦ Business Class · 1+2 ✦"
+                      : "✦ Economy Class · 2+2 ✦"}
                   </span>
                 </div>
-
               </div>
               {/* /Bus outer shell */}
             </div>
@@ -487,7 +640,9 @@ function SeatSelector() {
                 <div className="w-12 h-12 mx-auto mb-3 opacity-30">
                   <SeatIcon status="available" number="" />
                 </div>
-                <p className="text-sm text-slate-400">Tap a seat on the map to select it</p>
+                <p className="text-sm text-slate-400">
+                  Tap a seat on the map to select it
+                </p>
               </div>
             ) : (
               <div className="space-y-2 mb-4">
@@ -500,9 +655,13 @@ function SeatSelector() {
                       <div className="w-7 h-8">
                         <SeatIcon status="selected" number={s} />
                       </div>
-                      <span className="text-sm font-semibold text-slate-700">Seat {s}</span>
+                      <span className="text-sm font-semibold text-slate-700">
+                        Seat {s}
+                      </span>
                     </div>
-                    <span className="text-sm font-bold text-blue-700">{formatCurrency(trip.fare)}</span>
+                    <span className="text-sm font-bold text-blue-700">
+                      {formatCurrency(trip.fare)}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -544,11 +703,14 @@ function SeatSelector() {
 
             <div className="mt-3 flex items-start gap-2 text-[11px] text-slate-400">
               <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-amber-400" />
-              <span>Selected seats are locked for <strong className="text-slate-500">5 minutes</strong> while you complete payment.</span>
+              <span>
+                Selected seats are locked for{" "}
+                <strong className="text-slate-500">5 minutes</strong> while you
+                complete payment.
+              </span>
             </div>
           </div>
         </div>
-
       </div>
     </div>
   );
@@ -564,7 +726,9 @@ export default function SelectSeatsPage() {
           <div className="flex justify-center items-center py-32">
             <div className="flex flex-col items-center gap-3">
               <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
-              <p className="text-sm text-slate-500 font-medium">Loading seat map…</p>
+              <p className="text-sm text-slate-500 font-medium">
+                Loading seat map…
+              </p>
             </div>
           </div>
         }

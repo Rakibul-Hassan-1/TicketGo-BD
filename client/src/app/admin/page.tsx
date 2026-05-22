@@ -106,7 +106,7 @@ function Badge({ value, map }: { value: string; map: Record<string, string> }) {
     <span
       className={`text-xs px-2 py-0.5 rounded-full font-medium ${map[value] || "bg-gray-100 text-gray-600"}`}
     >
-      {value}
+      {value.charAt(0).toUpperCase() + value.slice(1)}
     </span>
   );
 }
@@ -127,7 +127,7 @@ export default function AdminPage() {
   const [operators, setOperators] = useState<any[]>([]);
 
   // Modals
-  const [busModal, setBusModal] = useState<any>(null); // null | 'add' | {edit obj}
+  const [busModal, setBusModal] = useState<any>(null);
   const [tripModal, setTripModal] = useState<any>(null);
   const [userModal, setUserModal] = useState<any>(null);
 
@@ -155,6 +155,9 @@ export default function AdminPage() {
   const [approvingBookingId, setApprovingBookingId] = useState<string | null>(
     null,
   );
+  const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!user) {
@@ -178,11 +181,19 @@ export default function AdminPage() {
     ])
       .then(([d, u, b, t, bk]) => {
         setStats(d.data.data.stats);
-        setRecentBookings(d.data.data.recentBookings);
+        setRecentBookings(
+          d.data.data.recentBookings.filter(
+            (x: any) => x.bookingStatus !== "cancelled",
+          ),
+        );
         setUsers(u.data.data.users);
         setBuses(b.data.data.buses);
         setTrips(t.data.data.trips);
-        setBookings(bk.data.data.bookings);
+        setBookings(
+          bk.data.data.bookings.filter(
+            (x: any) => x.bookingStatus !== "cancelled",
+          ),
+        );
         setOperators(
           u.data.data.users.filter((x: any) => x.role === "operator"),
         );
@@ -330,6 +341,7 @@ export default function AdminPage() {
     toast.success("Role updated");
   };
 
+  // ── BOOKING MANAGEMENT ────────────────────────────────────────────────
   const approveBooking = async (booking: any) => {
     setApprovingBookingId(booking._id);
     try {
@@ -347,6 +359,21 @@ export default function AdminPage() {
     }
   };
 
+  const cancelBooking = async (booking: any) => {
+    if (!confirm("Cancel this booking? This cannot be undone.")) return;
+    setCancellingBookingId(booking._id);
+    try {
+      await api.patch(`/admin/bookings/${booking._id}/cancel`);
+      setBookings((p) => p.filter((x) => x._id !== booking._id));
+      setRecentBookings((p) => p.filter((x) => x._id !== booking._id));
+      toast.success("Booking cancelled");
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || "Failed to cancel booking");
+    } finally {
+      setCancellingBookingId(null);
+    }
+  };
+
   if (loading)
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -361,6 +388,9 @@ export default function AdminPage() {
     { id: "users", label: "Users", icon: Users },
     { id: "bookings", label: "Bookings", icon: BookOpen },
   ];
+  const visibleBookings = bookings.filter(
+    (b: any) => b.bookingStatus !== "cancelled",
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -703,67 +733,108 @@ export default function AdminPage() {
                 All Bookings
               </h1>
               <div className="bg-white rounded-xl border divide-y">
-                {bookings.map((b: any) => (
-                  <div
-                    key={b._id}
-                    className="p-4 flex items-center justify-between gap-4"
-                  >
-                    <div>
-                      <p className="font-semibold text-gray-900 text-sm">
-                        {b.bookingId}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {b.user?.name} ({b.user?.email})
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {b.trip?.route?.from} → {b.trip?.route?.to} · Seats:{" "}
-                        {b.seats?.join(", ")}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {b.trip?.departureTime
-                          ? formatDate(b.trip.departureTime)
-                          : ""}
-                      </p>
-                    </div>
-                    <div className="text-right flex flex-col items-end gap-1.5">
-                      <p className="font-bold text-gray-900 text-sm">
-                        {formatCurrency(b.totalAmount)}
-                      </p>
-                      <Badge
-                        value={b.paymentStatus}
-                        map={{
-                          paid: "bg-green-100 text-green-700",
-                          pending: "bg-yellow-100 text-yellow-700",
-                          failed: "bg-red-100 text-red-700",
-                        }}
-                      />
-                      <Badge
-                        value={b.bookingStatus}
-                        map={{
-                          hold: "bg-amber-100 text-amber-700",
-                          confirmed: "bg-green-100 text-green-700",
-                          pending: "bg-yellow-100 text-yellow-700",
-                          cancelled: "bg-red-100 text-red-700",
-                        }}
-                      />
-                      {b.paymentStatus === "paid" &&
-                        b.bookingStatus === "hold" && (
-                          <button
-                            onClick={() => approveBooking(b)}
-                            disabled={approvingBookingId === b._id}
-                            className="mt-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
-                          >
-                            {approvingBookingId === b._id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Check className="w-3.5 h-3.5" />
+                {visibleBookings.length === 0 ? (
+                  <p className="text-center py-12 text-gray-400 text-sm">
+                    No bookings yet
+                  </p>
+                ) : (
+                  visibleBookings.map((b: any) => (
+                    <div
+                      key={b._id}
+                      className="p-4 flex items-center justify-between gap-4"
+                    >
+                      <div>
+                        <p className="font-semibold text-gray-900 text-sm">
+                          {b.bookingId}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {b.user?.name} ({b.user?.email})
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {b.trip?.route?.from} → {b.trip?.route?.to} · Seats:{" "}
+                          {b.seats?.join(", ")}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {b.trip?.departureTime
+                            ? formatDate(b.trip.departureTime)
+                            : ""}
+                        </p>
+                      </div>
+                      <div className="text-right flex flex-col items-end gap-1.5">
+                        <p className="font-bold text-gray-900 text-sm">
+                          {formatCurrency(b.totalAmount)}
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] uppercase tracking-wide text-gray-400">
+                            Payment
+                          </span>
+                          <Badge
+                            value={b.paymentStatus}
+                            map={{
+                              paid: "bg-green-100 text-green-700",
+                              pending: "bg-yellow-100 text-yellow-700",
+                              failed: "bg-red-100 text-red-700",
+                            }}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] uppercase tracking-wide text-gray-400">
+                            Booking
+                          </span>
+                          <Badge
+                            value={b.bookingStatus}
+                            map={{
+                              hold: "bg-amber-100 text-amber-700",
+                              confirmed: "bg-green-100 text-green-700",
+                              pending: "bg-yellow-100 text-yellow-700",
+                              cancelled: "bg-red-100 text-red-700",
+                            }}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          {/* Approve — only when paid and not yet confirmed/cancelled */}
+                          {b.paymentStatus === "paid" &&
+                            b.bookingStatus !== "confirmed" &&
+                            b.bookingStatus !== "cancelled" && (
+                              <button
+                                onClick={() => approveBooking(b)}
+                                disabled={
+                                  approvingBookingId === b._id ||
+                                  cancellingBookingId === b._id
+                                }
+                                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-600 disabled:opacity-60 transition-colors"
+                              >
+                                {approvingBookingId === b._id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Check className="w-3.5 h-3.5" />
+                                )}
+                                Approve
+                              </button>
                             )}
-                            Approve
-                          </button>
-                        )}
+                          {/* Cancel — hidden once already cancelled */}
+                          {b.bookingStatus !== "cancelled" && (
+                            <button
+                              onClick={() => cancelBooking(b)}
+                              disabled={
+                                cancellingBookingId === b._id ||
+                                approvingBookingId === b._id
+                              }
+                              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 disabled:opacity-60 transition-colors"
+                            >
+                              {cancellingBookingId === b._id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <X className="w-3.5 h-3.5" />
+                              )}
+                              Cancel
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           )}

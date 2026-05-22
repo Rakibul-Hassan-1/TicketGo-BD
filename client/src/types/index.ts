@@ -41,6 +41,7 @@ export interface Trip {
   arrivalTime: string;
   fare: number;
   availableSeats: string[];
+  availableSeatCount?: number;
   bookedSeats: string[];
   status: "scheduled" | "departed" | "arrived" | "cancelled";
 }

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import SSLCommerzPayment from "sslcommerz-lts";
 import { unlockSeat } from "../config/redis";
-import { emitSeatUnlocked } from "../config/socket";
+import { emitSeatUnlocked, emitSeatsBooked } from "../config/socket";
 import { io } from "../index";
 import { AuthRequest } from "../middleware/auth";
 import { Booking } from "../models/Booking";
@@ -202,6 +202,9 @@ export const paymentSuccess = async (
     for (const seat of booking.seats) {
       await unlockSeat(trip._id.toString(), seat).catch(() => {});
     }
+    // Notify clients that these seats are now booked and should be shown as booked
+    emitSeatsBooked(io, trip._id.toString(), booking.seats);
+    // Also notify to remove any temporary locks
     emitSeatUnlocked(io, trip._id.toString(), booking.seats);
 
     res.redirect(
