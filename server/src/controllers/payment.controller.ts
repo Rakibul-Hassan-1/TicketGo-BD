@@ -12,7 +12,7 @@ import { generateTicketPDF } from "../services/pdf.service";
 import { sendError, sendSuccess } from "../utils/apiResponse";
 import { bookingConfirmationTemplate, sendEmail } from "../utils/email";
 import {
-  getBackendBaseUrl,
+  backendBaseUrl,
   getTicketDownloadUrl,
   getTicketFilePath,
 } from "../utils/ticket";
@@ -20,7 +20,7 @@ import {
 const store_id = process.env.SSLCZ_STORE_ID || "";
 const store_passwd = process.env.SSLCZ_STORE_PASS || "";
 const is_live = process.env.SSLCZ_IS_LIVE === "true";
-const backendUrl = getBackendBaseUrl();
+const backendUrl = backendBaseUrl;
 const frontendUrl = (
   process.env.FRONTEND_URL || "http://localhost:3000"
 ).replace(/\/+$/, "");
