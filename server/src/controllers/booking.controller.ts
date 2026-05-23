@@ -98,7 +98,7 @@ export const getUserBookings = async (
   const bookings = await Booking.find({ user: req.user!.id })
     .populate({
       path: "trip",
-      populate: { path: "bus", select: "busName type" },
+      populate: { path: "bus", select: "busName busNumber type" },
     })
     .sort({ createdAt: -1 });
 

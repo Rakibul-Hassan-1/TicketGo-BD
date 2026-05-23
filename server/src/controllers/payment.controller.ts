@@ -35,7 +35,12 @@ const requirePaymentEnv = (): string | null => {
 export const finalizeBookingApproval = async (
   bookingId: string,
 ): Promise<void> => {
-  const booking = await Booking.findOne({ bookingId }).populate("trip user");
+  const booking = await Booking.findOne({ bookingId })
+    .populate({
+      path: "trip",
+      populate: { path: "bus", select: "busName busNumber type" },
+    })
+    .populate("user");
   if (!booking) {
     throw new Error("Booking not found");
   }
@@ -91,7 +96,12 @@ export const downloadTicket = async (
       return;
     }
 
-    const booking = await Booking.findOne({ bookingId }).populate("trip user");
+    const booking = await Booking.findOne({ bookingId })
+      .populate({
+        path: "trip",
+        populate: { path: "bus", select: "busName busNumber type" },
+      })
+      .populate("user");
     if (!booking) {
       sendError(res, "Booking not found", 404);
       return;
@@ -216,9 +226,12 @@ export const paymentSuccess = async (
       return;
     }
 
-    const booking = await Booking.findOne({ bookingId: tran_id }).populate(
-      "trip user",
-    );
+    const booking = await Booking.findOne({ bookingId: tran_id })
+      .populate({
+        path: "trip",
+        populate: { path: "bus", select: "busName busNumber type" },
+      })
+      .populate("user");
     if (!booking) {
       res.redirect(`${frontendUrl}/booking/failed?id=${tran_id}`);
       return;
