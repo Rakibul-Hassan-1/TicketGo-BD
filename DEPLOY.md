@@ -7,12 +7,14 @@ This guide covers setting up CI/CD and deploying TicketGo BD to production.
 Add these secrets to your GitHub repository (`Settings → Secrets and variables → Actions`):
 
 ### Required for Build/Testing
+
 ```
 MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/ticketgobd
 JWT_SECRET=your-super-secret-jwt-key-change-this
 ```
 
 ### Optional: Development/Staging Values
+
 ```
 # Server env (override defaults in CI)
 REDIS_URL=redis://localhost:6379
@@ -38,6 +40,7 @@ NEXT_PUBLIC_SOCKET_URL=https://api.ticketgo-bd.com
 ```
 
 ### For Vercel Deployment (Frontend)
+
 ```
 VERCEL_TOKEN=<your-vercel-token>
 VERCEL_ORG_ID=<your-vercel-org-id>
@@ -46,6 +49,7 @@ VERCEL_ORG_ID=<your-vercel-org-id>
 Get these from: https://vercel.com/account/tokens
 
 ### For Render Deployment (Backend)
+
 ```
 RENDER_DEPLOY_HOOK=https://api.render.com/deploy/srv-xxxxx?key=xxxxx
 ```
@@ -87,6 +91,7 @@ Get this from: Render Dashboard → Your Service → Deploy → Hook URL
 Go to your repo → Settings → Secrets and variables → Actions
 
 **Click "New repository secret"** and add (at minimum):
+
 - `MONGODB_URI` — Your MongoDB Atlas connection string
 - `JWT_SECRET` — A random string (use `openssl rand -base64 32`)
 
@@ -106,8 +111,10 @@ vercel link
 ```
 
 Add to GitHub Secrets:
+
 - `VERCEL_TOKEN` — Your personal access token
 - `VERCEL_ORG_ID` — Found in Vercel dashboard URL (vercel.com/teams/ORG_ID)
+- `VERCEL_PROJECT_NAME` — Optional if your Vercel project name differs from the client package name
 
 ### 3. Render Setup (Optional - for server deployment)
 
@@ -139,6 +146,7 @@ Add to GitHub Secrets:
 ## Monitoring Deployments
 
 View workflow runs in GitHub:
+
 - Repository → Actions tab
 - Click on any workflow run to see detailed logs
 - Check deployment status under "deploy-client" and "deploy-server" jobs
@@ -148,17 +156,21 @@ View workflow runs in GitHub:
 ## Troubleshooting
 
 **Build fails with "MONGODB_URI not defined"**
+
 - Add `MONGODB_URI` to GitHub Secrets
 
 **Vercel deployment skipped**
+
 - Add `VERCEL_TOKEN` to GitHub Secrets
 - Make sure you're on `main` branch
 
 **Render deployment doesn't trigger**
+
 - Check `RENDER_DEPLOY_HOOK` is correct
 - Verify Render webhook settings
 
 **Client build fails with "border-border class not found"**
+
 - Already fixed! Tailwind config updated to support CSS variables
 
 ---
