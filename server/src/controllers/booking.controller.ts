@@ -16,6 +16,7 @@ import { Booking } from "../models/Booking";
 import { Trip } from "../models/Trip";
 import { sendError, sendSuccess } from "../utils/apiResponse";
 import { generateBookingId } from "../utils/generateBookingId";
+import { getTicketDownloadUrl } from "../utils/ticket";
 
 export const lockSeats = async (
   req: AuthRequest,
@@ -100,7 +101,19 @@ export const getUserBookings = async (
       populate: { path: "bus", select: "busName type" },
     })
     .sort({ createdAt: -1 });
-  sendSuccess(res, { bookings });
+
+  const normalizedBookings = bookings.map((booking) => {
+    const plain = booking.toObject();
+    return {
+      ...plain,
+      ticketUrl:
+        plain.paymentStatus === "paid" && plain.bookingStatus === "confirmed"
+          ? getTicketDownloadUrl(plain.bookingId)
+          : plain.ticketUrl,
+    };
+  });
+
+  sendSuccess(res, { bookings: normalizedBookings });
 };
 
 export const getBookingById = async (
@@ -116,7 +129,17 @@ export const getBookingById = async (
     sendError(res, "Booking not found", 404);
     return;
   }
-  sendSuccess(res, { booking });
+
+  const plain = booking.toObject();
+  sendSuccess(res, {
+    booking: {
+      ...plain,
+      ticketUrl:
+        plain.paymentStatus === "paid" && plain.bookingStatus === "confirmed"
+          ? getTicketDownloadUrl(plain.bookingId)
+          : plain.ticketUrl,
+    },
+  });
 };
 
 export const cancelBooking = async (

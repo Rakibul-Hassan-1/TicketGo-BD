@@ -43,7 +43,7 @@ export default function RegisterPage() {
         <div className="bg-white rounded-2xl border border-gray-200 p-8">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {[
-              { name: 'name', label: 'Full Name', type: 'text', placeholder: 'John Doe' },
+              { name: 'name', label: 'Full Name', type: 'text', placeholder: 'Your Name' },
               { name: 'email', label: 'Email', type: 'email', placeholder: 'you@example.com' },
               { name: 'phone', label: 'Phone', type: 'tel', placeholder: '01700000000' },
               { name: 'password', label: 'Password', type: 'password', placeholder: '••••••••' },

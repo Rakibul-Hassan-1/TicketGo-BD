@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import fs from "fs";
 import SSLCommerzPayment from "sslcommerz-lts";
 import { unlockSeat } from "../config/redis";
 import { emitSeatUnlocked, emitSeatsBooked } from "../config/socket";
@@ -10,6 +11,7 @@ import { User } from "../models/User";
 import { generateTicketPDF } from "../services/pdf.service";
 import { sendError, sendSuccess } from "../utils/apiResponse";
 import { bookingConfirmationTemplate, sendEmail } from "../utils/email";
+import { getTicketDownloadUrl, getTicketFilePath } from "../utils/ticket";
 
 const normalizeBaseUrl = (
   value: string | undefined,
@@ -60,7 +62,7 @@ export const finalizeBookingApproval = async (
   try {
     const user = booking.user as any;
     const ticketPdfPath = await generateTicketPDF(booking, trip, user);
-    booking.ticketUrl = ticketPdfPath;
+    booking.ticketUrl = getTicketDownloadUrl(booking.bookingId);
     await booking.save();
 
     await sendEmail({
@@ -81,6 +83,53 @@ export const finalizeBookingApproval = async (
     });
   } catch (err) {
     console.error("Post-approval task error:", err);
+  }
+};
+
+export const downloadTicket = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const bookingId = String(req.params.bookingId || "").trim();
+    if (!bookingId) {
+      sendError(res, "Booking ID is required", 400);
+      return;
+    }
+
+    const booking = await Booking.findOne({ bookingId }).populate("trip user");
+    if (!booking) {
+      sendError(res, "Booking not found", 404);
+      return;
+    }
+
+    if (booking.paymentStatus !== "paid") {
+      sendError(res, "Ticket is not available yet", 400);
+      return;
+    }
+
+    const trip = booking.trip as any;
+    const user = booking.user as any;
+    let ticketPath = getTicketFilePath(booking.bookingId);
+
+    if (!fs.existsSync(ticketPath)) {
+      ticketPath = await generateTicketPDF(booking, trip, user);
+    }
+
+    booking.ticketUrl = getTicketDownloadUrl(booking.bookingId);
+    await booking.save();
+
+    res.download(ticketPath, `ticket-${booking.bookingId}.pdf`, (err) => {
+      if (err) {
+        console.error("Ticket download error:", err);
+        if (!res.headersSent) {
+          sendError(res, "Could not download ticket", 500);
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Ticket download error:", error);
+    sendError(res, "Could not download ticket", 500);
   }
 };
 
