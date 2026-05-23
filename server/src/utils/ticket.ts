@@ -1,27 +1,20 @@
 import path from "path";
 
-const normalizeBaseUrl = (value: string | undefined): string | null => {
-  const normalized = value?.trim().replace(/\/+$/, "");
-  return normalized ? normalized : null;
-};
+const normalizeBaseUrl = (
+  value: string | undefined,
+  fallback: string,
+): string => (value || fallback).replace(/\/+$/, "");
 
-export const getBackendBaseUrl = (): string => {
-  return (
-    normalizeBaseUrl(process.env.BACKEND_URL) ||
-    normalizeBaseUrl(process.env.RENDER_EXTERNAL_URL) ||
-    "http://localhost:5000"
-  );
-};
+export const backendBaseUrl = normalizeBaseUrl(
+  process.env.BACKEND_URL,
+  "http://localhost:5000",
+);
 
-export const getTicketDownloadUrl = (bookingId: string): string => {
-  return `${getBackendBaseUrl()}/api/payment/tickets/${bookingId}`;
-};
+export const getTicketFileName = (bookingId: string): string =>
+  `ticket-${bookingId}.pdf`;
 
-export const getTicketFilePath = (bookingId: string): string => {
-  return path.join(
-    process.cwd(),
-    "uploads",
-    "tickets",
-    `ticket-${bookingId}.pdf`,
-  );
-};
+export const getTicketFilePath = (bookingId: string): string =>
+  path.join(process.cwd(), "uploads", "tickets", getTicketFileName(bookingId));
+
+export const getTicketDownloadUrl = (bookingId: string): string =>
+  `${backendBaseUrl}/api/payment/tickets/${encodeURIComponent(bookingId)}`;
