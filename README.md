@@ -173,8 +173,11 @@ This project uses **GitHub Actions** for automated testing and deployment.
 - Or manually:
 
 ```bash
-cd client && vercel --prod
+cd client && vercel --prod --force --yes
 ```
+
+For CI or repeatable production deploys, use `VERCEL_SCOPE` with the team slug or username and force a fresh build so Vercel does not reuse a stale cached output.
+If a deployment still points at the wrong production site, also set `VERCEL_PROJECT_ID` so the workflow links the exact project before deploying.
 
 ### Backend → Render (Automated via CI/CD)
 

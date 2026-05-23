@@ -110,14 +110,24 @@ jobs:
       - name: Deploy to Vercel
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_SCOPE: ${{ secrets.VERCEL_SCOPE }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           if [ -z "$VERCEL_TOKEN" ]; then
             echo "⚠️ Vercel deployment skipped. Add VERCEL_TOKEN secret to enable."
             exit 0
           fi
+          if [ -z "$VERCEL_SCOPE" ]; then
+            echo "⚠️ Vercel deployment skipped. Add VERCEL_SCOPE secret with your team slug or username."
+            exit 0
+          fi
+          if [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "⚠️ Vercel deployment skipped. Add VERCEL_PROJECT_ID secret from client/.vercel/project.json."
+            exit 0
+          fi
           npm install -g vercel
-          vercel deploy --prod --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID
+          vercel link --yes --project=$VERCEL_PROJECT_ID --scope=$VERCEL_SCOPE --token=$VERCEL_TOKEN
+          vercel deploy --prod --force --yes --token=$VERCEL_TOKEN --scope=$VERCEL_SCOPE
         working-directory: client
 
   deploy-server:

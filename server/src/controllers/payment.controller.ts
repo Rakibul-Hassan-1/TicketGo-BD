@@ -11,29 +11,23 @@ import { User } from "../models/User";
 import { generateTicketPDF } from "../services/pdf.service";
 import { sendError, sendSuccess } from "../utils/apiResponse";
 import { bookingConfirmationTemplate, sendEmail } from "../utils/email";
-import { getTicketDownloadUrl, getTicketFilePath } from "../utils/ticket";
-
-const normalizeBaseUrl = (
-  value: string | undefined,
-  fallback: string,
-): string => (value || fallback).replace(/\/+$/, "");
+import {
+  getBackendBaseUrl,
+  getTicketDownloadUrl,
+  getTicketFilePath,
+} from "../utils/ticket";
 
 const store_id = process.env.SSLCZ_STORE_ID || "";
 const store_passwd = process.env.SSLCZ_STORE_PASS || "";
 const is_live = process.env.SSLCZ_IS_LIVE === "true";
-const backendUrl = normalizeBaseUrl(
-  process.env.BACKEND_URL,
-  "http://localhost:5000",
-);
-const frontendUrl = normalizeBaseUrl(
-  process.env.FRONTEND_URL,
-  "http://localhost:3000",
-);
+const backendUrl = getBackendBaseUrl();
+const frontendUrl = (
+  process.env.FRONTEND_URL || "http://localhost:3000"
+).replace(/\/+$/, "");
 
 const requirePaymentEnv = (): string | null => {
   if (!store_id) return "SSLCZ_STORE_ID is not configured";
   if (!store_passwd) return "SSLCZ_STORE_PASS is not configured";
-  if (!process.env.BACKEND_URL) return "BACKEND_URL is not configured";
   if (!process.env.FRONTEND_URL) return "FRONTEND_URL is not configured";
   return null;
 };

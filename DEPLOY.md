@@ -37,13 +37,17 @@ ADMIN_ROLE=admin
 # Client env
 NEXT_PUBLIC_API_URL=https://api.ticketgo-bd.com/api
 NEXT_PUBLIC_SOCKET_URL=https://api.ticketgo-bd.com
+
+# Backend public URL on Render
+BACKEND_URL=https://ticketgo-bd.onrender.com
 ```
 
 ### For Vercel Deployment (Frontend)
 
 ```
 VERCEL_TOKEN=<your-vercel-token>
-VERCEL_ORG_ID=<your-vercel-org-id>
+VERCEL_SCOPE=<your-vercel-team-slug-or-username>
+VERCEL_PROJECT_ID=<your-vercel-project-id>
 ```
 
 Get these from: https://vercel.com/account/tokens
@@ -113,8 +117,11 @@ vercel link
 Add to GitHub Secrets:
 
 - `VERCEL_TOKEN` — Your personal access token
-- `VERCEL_ORG_ID` — Found in Vercel dashboard URL (vercel.com/teams/ORG_ID)
+- `VERCEL_SCOPE` — Your Vercel team slug or username, used by the CLI to target the correct project
+- `VERCEL_PROJECT_ID` — The exact Vercel project id from `client/.vercel/project.json`
 - `VERCEL_PROJECT_NAME` — Optional if your Vercel project name differs from the client package name
+
+Add `BACKEND_URL` on Render as well so ticket links and payment callbacks never fall back to localhost.
 
 ### 3. Render Setup (Optional - for server deployment)
 
@@ -163,6 +170,7 @@ View workflow runs in GitHub:
 
 - Add `VERCEL_TOKEN` to GitHub Secrets
 - Make sure you're on `main` branch
+- Add `VERCEL_PROJECT_ID` so the workflow links the exact Vercel project before deploying
 
 **Render deployment doesn't trigger**
 
