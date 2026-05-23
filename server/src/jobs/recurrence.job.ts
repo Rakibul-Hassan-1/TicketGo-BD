@@ -63,6 +63,17 @@ function buildTripPayload(sched: any, bus: any, departUTC: any) {
       to: sched.route.to,
       distance: sched.route.distance,
       stops: sched.route.stops || [],
+      boardingStops:
+        sched.route.boardingStops ||
+        (sched.route.stops || []).slice(
+          0,
+          Math.ceil((sched.route.stops || []).length / 2),
+        ),
+      droppingStops:
+        sched.route.droppingStops ||
+        (sched.route.stops || []).slice(
+          Math.ceil((sched.route.stops || []).length / 2),
+        ),
     },
     departureTime: departUTC.toJSDate(),
     arrivalTime: arrival,

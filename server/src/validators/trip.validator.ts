@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const searchTripSchema = z.object({
   from: z.string().min(1),
@@ -12,6 +12,8 @@ export const createTripSchema = z.object({
   from: z.string().min(1),
   to: z.string().min(1),
   stops: z.array(z.string()).optional().default([]),
+  boardingStops: z.array(z.string()).optional().default([]),
+  droppingStops: z.array(z.string()).optional().default([]),
   distance: z.number().positive(),
   departureTime: z.string().datetime(),
   arrivalTime: z.string().datetime(),

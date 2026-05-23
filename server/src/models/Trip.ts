@@ -5,6 +5,8 @@ export interface IRoute {
   to: string;
   distance: number;
   stops: string[];
+  boardingStops?: string[];
+  droppingStops?: string[];
 }
 
 export interface ITrip extends Document {
@@ -27,6 +29,8 @@ const routeSchema = new Schema<IRoute>(
     to: { type: String, required: true },
     distance: { type: Number, required: true },
     stops: [{ type: String }],
+    boardingStops: [{ type: String }],
+    droppingStops: [{ type: String }],
   },
   { _id: false },
 );

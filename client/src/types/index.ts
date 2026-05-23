@@ -31,6 +31,8 @@ export interface Route {
   to: string;
   distance: number;
   stops: string[];
+  boardingStops?: string[];
+  droppingStops?: string[];
 }
 
 export interface Trip {

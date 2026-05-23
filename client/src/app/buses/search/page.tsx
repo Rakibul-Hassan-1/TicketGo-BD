@@ -10,13 +10,45 @@ import {
 } from "@/lib/socket";
 import { Trip } from "@/types";
 import { Loader2, SearchX } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+
+const BD_CITIES = [
+  "Dhaka",
+  "Chittagong",
+  "Sylhet",
+  "Rajshahi",
+  "Khulna",
+  "Barishal",
+  "Rangpur",
+  "Mymensingh",
+  "Cox's Bazar",
+  "Comilla",
+  "Jessore",
+  "Bogura",
+  "Narayanganj",
+  "Gazipur",
+  "Tangail",
+];
 
 function SearchResults() {
   const params = useSearchParams();
+  const router = useRouter();
+  const [fromInput, setFromInput] = useState(params.get("from") || "");
+  const [toInput, setToInput] = useState(params.get("to") || "");
+  const [dateInput, setDateInput] = useState(params.get("date") || "");
+  const [passengersInput, setPassengersInput] = useState(
+    params.get("passengers") || "1",
+  );
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedBoardingPoints, setSelectedBoardingPoints] = useState<
+    string[]
+  >([]);
+  const [selectedDroppingPoints, setSelectedDroppingPoints] = useState<
+    string[]
+  >([]);
+  const [selectedBusTypes, setSelectedBusTypes] = useState<string[]>([]);
   const tripIdsKey = trips
     .map((trip) => trip._id)
     .sort()
@@ -31,13 +63,51 @@ function SearchResults() {
       setLoading(false);
       return;
     }
-    api
-      .get(
-        `/trips/search?from=${from}&to=${to}&date=${date}&passengers=${passengers}`,
-      )
-      .then((r) => setTrips(r.data.data.trips))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    const fetchTrips = () => {
+      setLoading(true);
+      // add cache-busting timestamp to prevent 304 responses from caches
+      const url = `/trips/search?from=${from}&to=${to}&date=${date}&passengers=${passengers}&ts=${Date.now()}`;
+      return api
+        .get(url)
+        .then((r) => setTrips(r.data.data.trips))
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    };
+
+    fetchTrips();
+
+    // Listen for trip changes and refetch when they occur (socket + window fallback)
+    connectSocket();
+    const s = getSocket();
+    const onTripChanged = (_payload: any) => {
+      fetchTrips();
+    };
+    const onTripDeleted = (_payload: any) => {
+      fetchTrips();
+    };
+    s.on("trip:changed", onTripChanged);
+    s.on("trip:deleted", onTripDeleted);
+
+    const onWindowChanged = (e: any) => fetchTrips();
+    const onWindowDeleted = (e: any) => fetchTrips();
+    window.addEventListener("trip:changed", onWindowChanged as any);
+    window.addEventListener("trip:deleted", onWindowDeleted as any);
+
+    // cross-tab updates via localStorage
+    const onStorage = (ev: StorageEvent) => {
+      if (ev.key === "tgb_trip_changed") {
+        fetchTrips();
+      }
+    };
+    window.addEventListener("storage", onStorage as any);
+
+    return () => {
+      s.off("trip:changed", onTripChanged);
+      s.off("trip:deleted", onTripDeleted);
+      window.removeEventListener("trip:changed", onWindowChanged as any);
+      window.removeEventListener("trip:deleted", onWindowDeleted as any);
+      window.removeEventListener("storage", onStorage as any);
+    };
   }, [params]);
 
   useEffect(() => {
@@ -133,6 +203,74 @@ function SearchResults() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="mb-6">
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!fromInput || !toInput || !dateInput) return;
+              router.push(
+                `/buses/search?from=${encodeURIComponent(fromInput)}&to=${encodeURIComponent(
+                  toInput,
+                )}&date=${encodeURIComponent(dateInput)}&passengers=${encodeURIComponent(
+                  passengersInput,
+                )}`,
+              );
+            }}
+            className="flex flex-col md:flex-row gap-3 md:items-center"
+          >
+            <select
+              className="border rounded px-3 py-2 text-sm w-full md:w-48"
+              value={fromInput}
+              onChange={(e) => setFromInput(e.target.value)}
+            >
+              <option value="">From</option>
+              {BD_CITIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="border rounded px-3 py-2 text-sm w-full md:w-48"
+              value={toInput}
+              onChange={(e) => setToInput(e.target.value)}
+            >
+              <option value="">To</option>
+              {BD_CITIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+
+            <input
+              type="date"
+              className="border rounded px-3 py-2 text-sm w-full md:w-40"
+              value={dateInput}
+              onChange={(e) => setDateInput(e.target.value)}
+            />
+
+            <select
+              className="border rounded px-3 py-2 text-sm w-full md:w-24"
+              value={passengersInput}
+              onChange={(e) => setPassengersInput(e.target.value)}
+            >
+              {[1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={String(n)}>
+                  {n}
+                </option>
+              ))}
+            </select>
+
+            <div className="flex-shrink-0">
+              <button className="bg-primary-600 text-white px-4 py-2 rounded text-sm">
+                Search
+              </button>
+            </div>
+          </form>
+        </div>
+
         <h1 className="text-xl font-bold text-gray-900">
           {params.get("from")} to {params.get("to")}
         </h1>
@@ -150,10 +288,205 @@ function SearchResults() {
           <p className="font-medium">No buses found for this route</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {trips.map((t) => (
-            <TripCard key={t._id} trip={t} />
-          ))}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Sidebar filters */}
+          <aside className="lg:col-span-1">
+            <div className="bg-white rounded-xl border p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900">Filters</h3>
+                <button
+                  onClick={() => {
+                    setSelectedBoardingPoints([]);
+                    setSelectedDroppingPoints([]);
+                    setSelectedBusTypes([]);
+                  }}
+                  className="text-sm text-primary-600"
+                >
+                  RESET
+                </button>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-red-600 mb-2">
+                  BUS TYPE
+                </p>
+                {(() => {
+                  const types = Array.from(
+                    new Set(trips.map((t) => t.bus?.type).filter(Boolean)),
+                  ).sort();
+                  if (!types.length)
+                    return <p className="text-xs text-gray-400">No types</p>;
+                  return types.map((type) => (
+                    <label
+                      key={type}
+                      className="flex items-center gap-2 text-sm mb-1"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedBusTypes.includes(type)}
+                        onChange={() => {
+                          setSelectedBusTypes((prev) =>
+                            prev.includes(type)
+                              ? prev.filter((x) => x !== type)
+                              : [...prev, type],
+                          );
+                        }}
+                        className="h-4 w-4 rounded border-gray-300 text-primary-600"
+                      />
+                      <span>{type}</span>
+                    </label>
+                  ));
+                })()}
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-red-600 mb-2">
+                  BOARDING POINT
+                </p>
+                <div className="max-h-40 overflow-auto pr-2">
+                  {(() => {
+                    const points = Array.from(
+                      new Set(
+                        trips
+                          .flatMap((t) => {
+                            const arr: string[] = [];
+                            if (t.route?.from) arr.push(t.route.from);
+                            if (
+                              Array.isArray(t.route?.boardingStops) &&
+                              t.route.boardingStops.length
+                            )
+                              arr.push(...t.route.boardingStops);
+                            else if (Array.isArray(t.route?.stops))
+                              arr.push(...t.route.stops);
+                            return arr;
+                          })
+                          .filter(Boolean),
+                      ),
+                    )
+                      .filter(Boolean)
+                      .sort();
+
+                    if (!points.length)
+                      return (
+                        <p className="text-xs text-gray-400">
+                          No boarding points
+                        </p>
+                      );
+
+                    return points.map((point) => (
+                      <label
+                        key={point}
+                        className="flex items-start gap-2 text-sm mb-2"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedBoardingPoints.includes(point)}
+                          onChange={() => {
+                            setSelectedBoardingPoints((prev) =>
+                              prev.includes(point)
+                                ? prev.filter((x) => x !== point)
+                                : [...prev, point],
+                            );
+                          }}
+                          className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600"
+                        />
+                        <div className="text-sm leading-snug">{point}</div>
+                      </label>
+                    ));
+                  })()}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-red-600 mb-2">
+                  DROPPING POINT
+                </p>
+                <div className="max-h-40 overflow-auto pr-2">
+                  {(() => {
+                    const points = Array.from(
+                      new Set(
+                        trips
+                          .flatMap((t) => {
+                            const arr: string[] = [];
+                            if (t.route?.to) arr.push(t.route.to);
+                            if (
+                              Array.isArray(t.route?.droppingStops) &&
+                              t.route.droppingStops.length
+                            )
+                              arr.push(...t.route.droppingStops);
+                            else if (Array.isArray(t.route?.stops))
+                              arr.push(...t.route.stops);
+                            return arr;
+                          })
+                          .filter(Boolean),
+                      ),
+                    )
+                      .filter(Boolean)
+                      .sort();
+
+                    if (!points.length)
+                      return (
+                        <p className="text-xs text-gray-400">
+                          No dropping points
+                        </p>
+                      );
+
+                    return points.map((point) => (
+                      <label
+                        key={point}
+                        className="flex items-start gap-2 text-sm mb-2"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedDroppingPoints.includes(point)}
+                          onChange={() => {
+                            setSelectedDroppingPoints((prev) =>
+                              prev.includes(point)
+                                ? prev.filter((x) => x !== point)
+                                : [...prev, point],
+                            );
+                          }}
+                          className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600"
+                        />
+                        <div className="text-sm leading-snug">{point}</div>
+                      </label>
+                    ));
+                  })()}
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          {/* Results */}
+          <div className="lg:col-span-3">
+            <div className="space-y-4">
+              {trips
+                .filter((trip) => {
+                  if (
+                    selectedBusTypes.length &&
+                    !selectedBusTypes.includes(trip.bus?.type || "")
+                  )
+                    return false;
+                  if (selectedBoardingPoints.length) {
+                    const points = [
+                      trip.route.from,
+                      ...(trip.route.stops || []),
+                    ];
+                    if (!selectedBoardingPoints.some((p) => points.includes(p)))
+                      return false;
+                  }
+                  if (selectedDroppingPoints.length) {
+                    const points = [trip.route.to, ...(trip.route.stops || [])];
+                    if (!selectedDroppingPoints.some((p) => points.includes(p)))
+                      return false;
+                  }
+                  return true;
+                })
+                .map((t) => (
+                  <TripCard key={t._id} trip={t} />
+                ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

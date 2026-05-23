@@ -8,6 +8,8 @@ export interface IRecurringSchedule extends Document {
     to: string;
     distance: number;
     stops?: string[];
+    boardingStops?: string[];
+    droppingStops?: string[];
   };
   rrule?: string; // optional RFC5545 rule
   daysOfWeek?: number[]; // 0=Sun..6=Sat (simple fallback)
@@ -27,6 +29,8 @@ const routeSchema = new Schema(
     to: { type: String, required: true },
     distance: { type: Number, required: true, min: 0 },
     stops: [{ type: String }],
+    boardingStops: [{ type: String }],
+    droppingStops: [{ type: String }],
   },
   { _id: false },
 );

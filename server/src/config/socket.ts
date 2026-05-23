@@ -87,3 +87,13 @@ export const emitSeatsUnbooked = (
     seats,
   } satisfies SeatUpdatePayload);
 };
+
+// Notify clients that a trip was created or updated. Payload should be the trip object.
+export const emitTripChanged = (io: Server, trip: any): void => {
+  io.emit("trip:changed", { trip });
+};
+
+// Notify clients that a trip was deleted.
+export const emitTripDeleted = (io: Server, tripId: string): void => {
+  io.emit("trip:deleted", { tripId });
+};

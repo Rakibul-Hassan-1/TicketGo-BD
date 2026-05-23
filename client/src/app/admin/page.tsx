@@ -125,6 +125,8 @@ export default function AdminPage() {
   const [trips, setTrips] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [operators, setOperators] = useState<any[]>([]);
+  const [tripSearch, setTripSearch] = useState("");
+  const [selectedTripIds, setSelectedTripIds] = useState<string[]>([]);
 
   // Modals
   const [busModal, setBusModal] = useState<any>(null);
@@ -145,13 +147,24 @@ export default function AdminPage() {
     from: "",
     to: "",
     distance: "",
+    stops: "",
     departureTime: "",
     arrivalTime: "",
     fare: "",
+    boardingPoints: [] as string[],
+    droppingPoints: [] as string[],
+    boardingInput: "",
+    droppingInput: "",
   };
   const [busForm, setBusForm] = useState(emptyBus);
   const [tripForm, setTripForm] = useState(emptyTrip);
   const [saving, setSaving] = useState(false);
+  const [initialDepartureMs, setInitialDepartureMs] = useState<number | null>(
+    null,
+  );
+  const [initialArrivalMs, setInitialArrivalMs] = useState<number | null>(null);
+  const [departureTouched, setDepartureTouched] = useState(false);
+  const [arrivalTouched, setArrivalTouched] = useState(false);
   const [approvingBookingId, setApprovingBookingId] = useState<string | null>(
     null,
   );
@@ -286,6 +299,8 @@ export default function AdminPage() {
   const openAddTrip = () => {
     setTripForm(emptyTrip);
     setTripModal("add");
+    setDepartureTouched(false);
+    setArrivalTouched(false);
   };
   const openEditTrip = (t: any) => {
     setTripForm({
@@ -293,6 +308,16 @@ export default function AdminPage() {
       from: t.route?.from || "",
       to: t.route?.to || "",
       distance: t.route?.distance || "",
+      stops: (t.route?.stops || []).join("\n"),
+      boardingPoints: (t.route?.stops || []).slice(
+        0,
+        Math.ceil((t.route?.stops || []).length / 2),
+      ),
+      droppingPoints: (t.route?.stops || []).slice(
+        Math.ceil((t.route?.stops || []).length / 2),
+      ),
+      boardingInput: "",
+      droppingInput: "",
       fare: t.fare || "",
       departureTime: t.departureTime
         ? new Date(t.departureTime).toISOString().slice(0, 16)
@@ -302,30 +327,85 @@ export default function AdminPage() {
         : "",
     });
     setTripModal(t);
+    setInitialDepartureMs(
+      t.departureTime ? new Date(t.departureTime).getTime() : null,
+    );
+    setInitialArrivalMs(
+      t.arrivalTime ? new Date(t.arrivalTime).getTime() : null,
+    );
+    setDepartureTouched(false);
+    setArrivalTouched(false);
   };
 
   const saveTrip = async () => {
     setSaving(true);
     try {
-      const payload = {
+      const stopsArr = Array.from(
+        new Set(
+          [
+            ...(tripForm.boardingPoints || []),
+            ...(tripForm.droppingPoints || []),
+          ]
+            .map((s: any) => String(s).trim())
+            .filter(Boolean),
+        ),
+      );
+
+      const payload: any = {
         busId: tripForm.busId,
         from: tripForm.from,
         to: tripForm.to,
+        stops: stopsArr,
+        boardingStops: tripForm.boardingPoints || [],
+        droppingStops: tripForm.droppingPoints || [],
         distance: Number(tripForm.distance),
         fare: Number(tripForm.fare),
-        departureTime: new Date(tripForm.departureTime).toISOString(),
-        arrivalTime: new Date(tripForm.arrivalTime).toISOString(),
+        departureTime: tripForm.departureTime
+          ? new Date(tripForm.departureTime).toISOString()
+          : undefined,
+        arrivalTime: tripForm.arrivalTime
+          ? new Date(tripForm.arrivalTime).toISOString()
+          : undefined,
       };
+      // When editing, only send departure/arrival if the user modified them.
+      if (tripModal && tripModal !== "add") {
+        if (!departureTouched) delete payload.departureTime;
+        if (!arrivalTouched) delete payload.arrivalTime;
+      }
+
       if (tripModal === "add") {
         const res = await api.post("/trips", payload);
         setTrips((p) => [res.data.data.trip, ...p]);
         toast.success("Trip added!");
+        // notify other tabs/clients in this browser window as a fallback
+        try {
+          window.dispatchEvent(
+            new CustomEvent("trip:changed", { detail: res.data.data.trip }),
+          );
+          try {
+            localStorage.setItem(
+              "tgb_trip_changed",
+              JSON.stringify({ id: res.data.data.trip._id, t: Date.now() }),
+            );
+          } catch {}
+        } catch {}
       } else {
         const res = await api.patch(`/trips/${tripModal._id}`, payload);
         setTrips((p) =>
           p.map((x) => (x._id === tripModal._id ? res.data.data.trip : x)),
         );
         toast.success("Trip updated!");
+        try {
+          window.dispatchEvent(
+            new CustomEvent("trip:changed", { detail: res.data.data.trip }),
+          );
+          try {
+            localStorage.setItem(
+              "tgb_trip_changed",
+              JSON.stringify({ id: res.data.data.trip._id, t: Date.now() }),
+            );
+          } catch {}
+        } catch {}
       }
       setTripModal(null);
     } catch (e: any) {
@@ -336,13 +416,69 @@ export default function AdminPage() {
   };
 
   const deleteTrip = async (id: string) => {
-    if (!confirm("Cancel this trip?")) return;
-    await api.patch(`/trips/${id}`, { status: "cancelled" });
-    setTrips((p) =>
-      p.map((x) => (x._id === id ? { ...x, status: "cancelled" } : x)),
-    );
-    toast.success("Trip cancelled");
+    if (!confirm("Delete this trip permanently?")) return;
+    try {
+      await api.delete(`/trips/${id}`);
+      setTrips((p) => p.filter((x) => x._id !== id));
+      setSelectedTripIds((p) => p.filter((tripId) => tripId !== id));
+      toast.success("Trip deleted");
+      try {
+        window.dispatchEvent(
+          new CustomEvent("trip:deleted", { detail: { tripId: id } }),
+        );
+        try {
+          localStorage.setItem(
+            "tgb_trip_changed",
+            JSON.stringify({ id, t: Date.now(), deleted: true }),
+          );
+        } catch {}
+      } catch {}
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || "Failed to delete trip");
+    }
   };
+
+  const batchDeleteTrips = async () => {
+    if (!selectedTripIds.length) {
+      toast.error("Select at least one trip");
+      return;
+    }
+
+    if (!confirm(`Delete ${selectedTripIds.length} selected trips?`)) return;
+
+    try {
+      await api.post("/trips/batch-delete", { ids: selectedTripIds });
+      setTrips((p) => p.filter((trip) => !selectedTripIds.includes(trip._id)));
+      setSelectedTripIds([]);
+      toast.success("Selected trips deleted");
+    } catch (e: any) {
+      toast.error(
+        e.response?.data?.message || "Failed to delete selected trips",
+      );
+    }
+  };
+
+  const toggleTripSelection = (id: string) => {
+    setSelectedTripIds((p) =>
+      p.includes(id) ? p.filter((tripId) => tripId !== id) : [...p, id],
+    );
+  };
+
+  const visibleTrips = trips
+    .filter((trip) => trip.status !== "cancelled")
+    .filter((trip) => {
+      const q = tripSearch.trim().toLowerCase();
+      if (!q) return true;
+      return [
+        trip.route?.from,
+        trip.route?.to,
+        trip.bus?.busName,
+        trip.bus?.busNumber,
+        trip.status,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q));
+    });
 
   // ── USER MANAGEMENT ───────────────────────────────────────────────────
   const toggleUser = async (u: any) => {
@@ -740,66 +876,114 @@ export default function AdminPage() {
                 <h1 className="text-xl font-bold text-gray-900">
                   Manage Trips & Routes
                 </h1>
-                <button
-                  onClick={openAddTrip}
-                  className="flex items-center gap-1.5 bg-primary-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors"
-                >
-                  <Plus className="w-4 h-4" /> Add Trip
-                </button>
+                <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                  <input
+                    value={tripSearch}
+                    onChange={(e) => setTripSearch(e.target.value)}
+                    placeholder="Search route, bus, status..."
+                    className="w-full sm:w-72 border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={batchDeleteTrips}
+                      disabled={!selectedTripIds.length}
+                      className="flex items-center gap-1.5 bg-red-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Trash2 className="w-4 h-4" /> Delete Selected
+                    </button>
+                    <button
+                      onClick={openAddTrip}
+                      className="flex items-center gap-1.5 bg-primary-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" /> Add Trip
+                    </button>
+                  </div>
+                </div>
               </div>
               <div className="bg-white rounded-xl border divide-y">
-                {trips.length === 0 ? (
+                {visibleTrips.length === 0 ? (
                   <p className="text-center py-12 text-gray-400 text-sm">
-                    No trips yet
+                    No trips found
                   </p>
                 ) : (
-                  trips.map((t: any) => (
-                    <div
-                      key={t._id}
-                      className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                    >
-                      <div>
-                        <p className="font-semibold text-gray-900 text-sm">
-                          {t.route?.from} → {t.route?.to}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {t.bus?.busName} · {t.bus?.type} ·{" "}
-                          {formatCurrency(t.fare)}/seat
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          {t.departureTime
-                            ? formatDate(t.departureTime) +
-                              " " +
-                              formatTime(t.departureTime)
-                            : ""}{" "}
-                          · {t.availableSeats?.length} seats left
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          value={t.status}
-                          map={{
-                            scheduled: "bg-blue-100 text-blue-700",
-                            departed: "bg-yellow-100 text-yellow-700",
-                            cancelled: "bg-red-100 text-red-700",
-                            arrived: "bg-gray-100 text-gray-600",
+                  <>
+                    <div className="p-3 border-b flex items-center justify-between text-xs text-gray-500">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={
+                            visibleTrips.length > 0 &&
+                            selectedTripIds.length === visibleTrips.length
+                          }
+                          onChange={(e) => {
+                            setSelectedTripIds(
+                              e.target.checked
+                                ? visibleTrips.map((trip: any) => trip._id)
+                                : [],
+                            );
                           }}
+                          className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                         />
-                        <button
-                          onClick={() => openEditTrip(t)}
-                          className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => deleteTrip(t._id)}
-                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                        Select all visible
+                      </label>
+                      <span>Showing {visibleTrips.length} trip(s)</span>
                     </div>
-                  ))
+                    {visibleTrips.map((t: any) => (
+                      <div
+                        key={t._id}
+                        className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="flex items-start gap-3 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={selectedTripIds.includes(t._id)}
+                            onChange={() => toggleTripSelection(t._id)}
+                            className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          <div className="min-w-0">
+                            <p className="font-semibold text-gray-900 text-sm">
+                              {t.route?.from} → {t.route?.to}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {t.bus?.busName} · {t.bus?.type} ·{" "}
+                              {formatCurrency(t.fare)}/seat
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              {t.departureTime
+                                ? formatDate(t.departureTime) +
+                                  " " +
+                                  formatTime(t.departureTime)
+                                : ""}{" "}
+                              · {t.availableSeats?.length} seats left
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            value={t.status}
+                            map={{
+                              scheduled: "bg-blue-100 text-blue-700",
+                              departed: "bg-yellow-100 text-yellow-700",
+                              cancelled: "bg-red-100 text-red-700",
+                              arrived: "bg-gray-100 text-gray-600",
+                            }}
+                          />
+                          <button
+                            onClick={() => openEditTrip(t)}
+                            className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => deleteTrip(t._id)}
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </>
                 )}
               </div>
             </div>
@@ -1430,17 +1614,137 @@ export default function AdminPage() {
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
+              <Field label="Boarding Points">
+                <div className="flex gap-2">
+                  <input
+                    className={inp}
+                    value={tripForm.boardingInput || ""}
+                    onChange={(e) =>
+                      setTripForm((p) => ({
+                        ...p,
+                        boardingInput: e.target.value,
+                      }))
+                    }
+                    placeholder="Enter boarding point"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const v = String(tripForm.boardingInput || "").trim();
+                      if (!v) return;
+                      setTripForm((p) => ({
+                        ...p,
+                        boardingPoints: Array.from(
+                          new Set([...(p.boardingPoints || []), v]),
+                        ),
+                        boardingInput: "",
+                      }));
+                    }}
+                    className="bg-primary-600 text-white px-3 rounded-lg"
+                  >
+                    Add
+                  </button>
+                </div>
+                <div className="flex gap-2 flex-wrap mt-2">
+                  {(tripForm.boardingPoints || []).map(
+                    (bp: string, i: number) => (
+                      <span
+                        key={bp + i}
+                        className="flex items-center gap-2 bg-gray-100 px-2 py-1 rounded-full text-sm"
+                      >
+                        <span className="max-w-xs truncate">{bp}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTripForm((p) => ({
+                              ...p,
+                              boardingPoints: (p.boardingPoints || []).filter(
+                                (_, idx) => idx !== i,
+                              ),
+                            }))
+                          }
+                          className="text-red-500"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ),
+                  )}
+                </div>
+              </Field>
+
+              <Field label="Dropping Points">
+                <div className="flex gap-2">
+                  <input
+                    className={inp}
+                    value={tripForm.droppingInput || ""}
+                    onChange={(e) =>
+                      setTripForm((p) => ({
+                        ...p,
+                        droppingInput: e.target.value,
+                      }))
+                    }
+                    placeholder="Enter dropping point"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const v = String(tripForm.droppingInput || "").trim();
+                      if (!v) return;
+                      setTripForm((p) => ({
+                        ...p,
+                        droppingPoints: Array.from(
+                          new Set([...(p.droppingPoints || []), v]),
+                        ),
+                        droppingInput: "",
+                      }));
+                    }}
+                    className="bg-primary-600 text-white px-3 rounded-lg"
+                  >
+                    Add
+                  </button>
+                </div>
+                <div className="flex gap-2 flex-wrap mt-2">
+                  {(tripForm.droppingPoints || []).map(
+                    (dp: string, i: number) => (
+                      <span
+                        key={dp + i}
+                        className="flex items-center gap-2 bg-gray-100 px-2 py-1 rounded-full text-sm"
+                      >
+                        <span className="max-w-xs truncate">{dp}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTripForm((p) => ({
+                              ...p,
+                              droppingPoints: (p.droppingPoints || []).filter(
+                                (_, idx) => idx !== i,
+                              ),
+                            }))
+                          }
+                          className="text-red-500"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ),
+                  )}
+                </div>
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <Field label="Departure Time">
                 <input
                   type="datetime-local"
                   className={inp}
                   value={tripForm.departureTime}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setTripForm((p) => ({
                       ...p,
                       departureTime: e.target.value,
-                    }))
-                  }
+                    }));
+                    setDepartureTouched(true);
+                  }}
                 />
               </Field>
               <Field label="Arrival Time">
@@ -1448,9 +1752,10 @@ export default function AdminPage() {
                   type="datetime-local"
                   className={inp}
                   value={tripForm.arrivalTime}
-                  onChange={(e) =>
-                    setTripForm((p) => ({ ...p, arrivalTime: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    setTripForm((p) => ({ ...p, arrivalTime: e.target.value }));
+                    setArrivalTouched(true);
+                  }}
                 />
               </Field>
             </div>
